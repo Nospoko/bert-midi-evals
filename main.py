@@ -36,7 +36,7 @@ class ComposerClassificationDataset:
         finish = self.sequence_length
         new_records = []
         while finish < df.shape[0]:
-            part = df[start: finish].reset_index(drop=True)
+            part = df[start:finish].reset_index(drop=True)
             new_record = {"notes": part.to_dict(orient="list")}
             # Keep the metadata
             new_record |= record
