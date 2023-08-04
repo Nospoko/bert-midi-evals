@@ -7,6 +7,7 @@ class PitchSeqNN(nn.Module):
     Simple sequential neural network for classifying pitch tensors of size (128, 1) into two classes.
     (performs poorly - pretty much randomly)
     """
+
     def __init__(self):
         super(PitchSeqNN, self).__init__()
         self.dense1 = nn.Linear(128, 256)
@@ -24,7 +25,7 @@ class PitchSeqNN(nn.Module):
         return x
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     model = PitchSeqNN()
     params = list(model.parameters())
     print(params[i].size() for i in range(len(params)))
