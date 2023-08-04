@@ -1,9 +1,11 @@
 from typing import Optional
+
 import torch.optim
+import pandas as pd
 import torch.nn as nn
 from torch.utils.data import DataLoader
+
 from model import PitchSeqNN
-import pandas as pd
 from src.data.dataset import ComposerClassificationDataset
 
 BATCH_SIZE = 16
