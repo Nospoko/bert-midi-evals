@@ -1,8 +1,14 @@
 import torch.nn as nn
 import torch.nn.functional as F
-class ComposerClassifier(nn.Module):
+
+
+class PitchSeqNN(nn.Module):
+    """
+    Simple sequential neural network for classifying pitch tensors of size (128, 1) into two classes.
+    (performs poorly - pretty much randomly)
+    """
     def __init__(self):
-        super(ComposerClassifier, self).__init__()
+        super(PitchSeqNN, self).__init__()
         self.dense1 = nn.Linear(128, 256)
         self.dense2 = nn.Linear(256, 512)
         self.dense3 = nn.Linear(512, 128)
@@ -19,6 +25,6 @@ class ComposerClassifier(nn.Module):
 
 
 if __name__ == '__main__':
-    model = ComposerClassifier()
+    model = PitchSeqNN()
     params = list(model.parameters())
     print(params[i].size() for i in range(len(params)))
