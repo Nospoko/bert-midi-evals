@@ -7,7 +7,7 @@ class ComposerClassificationDataset:
     def __init__(
         self,
         split: str = "train",
-        sequence_length: int = 128,
+        sequence_length: int = 64,
         # chose these composers due to the similar total number of notes in maestro dataset
         selected_composers: list[str] = ["Frédéric Chopin", "Ludwig van Beethoven"],
     ):
