@@ -1,12 +1,13 @@
 from typing import Optional
 
+import numpy as np
 import torch.optim
 import pandas as pd
 import torch.nn as nn
 from torch.utils.data import DataLoader
-import numpy as np
-from model import *
+
 from data.dataset import ComposerClassificationDataset
+from model import PitchSeqNN, PitchSeqNNv2_64, PitchSeqNNv3_64, PitchSeqNNv4_64
 
 BATCH_SIZE = 8
 N_EPOCHS = 50
@@ -42,11 +43,7 @@ def prepare_samples_pitch_only(dataset: ComposerClassificationDataset):
     return samples
 
 
-def train_model(
-        model: nn.Module,
-        train_data: DataLoader,
-        lr=1e-5,
-        val_data: Optional[DataLoader] = None):
+def train_model(model: nn.Module, train_data: DataLoader, lr=1e-5, val_data: Optional[DataLoader] = None):
     """
     Train a classifier using the provided train_data. Evaluates on optional val_data
 
@@ -79,7 +76,8 @@ def train_model(
         if val_data is not None:
             val_loss = evaluate(model, val_data)
             print(f"[{epoch + 1}] loss: {running_loss:.3f} val loss: {val_loss:.3f}")
-        else: print(f"[{epoch + 1}] loss: {running_loss:.3f}")
+        else:
+            print(f"[{epoch + 1}] loss: {running_loss:.3f}")
 
     print("Finished Training")
     return model
@@ -87,15 +85,15 @@ def train_model(
 
 def evaluate(model, test_dataloader: DataLoader):
     """
-        Evaluates the performance of a given model
+    Evaluates the performance of a given model
 
-        Args:
-            model (torch.nn.Module): The trained model to be evaluated.
-            test_dataloader (DataLoader): The test dataset loader containing notes and labels in batches.
+    Args:
+        model (torch.nn.Module): The trained model to be evaluated.
+        test_dataloader (DataLoader): The test dataset loader containing notes and labels in batches.
 
-        Returns:
-            val_loss: The average loss value calculated over the test dataset.
-        """
+    Returns:
+        val_loss: The average loss value calculated over the test dataset.
+    """
     # get test data
     loss = 0.0
     with torch.no_grad():
@@ -149,7 +147,7 @@ def test_model(model: nn.Module, test_data: DataLoader, path: Optional[str] = No
 
 
 def get_dataloader(split="train", sequence_length=64, batch_size=BATCH_SIZE):
-    """ Create and prepare a DataLoader from ComposerClassificationDataset.
+    """Create and prepare a DataLoader from ComposerClassificationDataset.
 
     Parameters:
         split (str): dataset split. Possible splits: "train", "test", "validation"
@@ -163,7 +161,6 @@ def get_dataloader(split="train", sequence_length=64, batch_size=BATCH_SIZE):
 
 
 def main():
-
     models = [PitchSeqNN(), PitchSeqNNv2_64(), PitchSeqNNv3_64(), PitchSeqNNv4_64()]
     losses = []
     train_dataloader = get_dataloader(split="train", sequence_length=64, batch_size=16)
