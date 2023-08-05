@@ -108,7 +108,7 @@ def evaluate(model, test_dataloader: DataLoader):
             for pred, label in zip(preds, labels):
                 if pred == label:
                     correct += 1
-    val_loss = loss/len(test_dataloader)
+    val_loss = loss / len(test_dataloader)
     val_accuracy = correct / total
     return val_loss, val_accuracy
 
@@ -179,8 +179,6 @@ def main():
         losses.append(evaluate(model, test_dataloader))
     print(losses)
     torch.save(models[np.argmax(losses)].state_dict(), "best.pth")
-    # path = "model1.pth"
-    # torch.save(model.state_dict(), path)
 
 
 if __name__ == "__main__":
