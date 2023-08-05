@@ -74,8 +74,8 @@ def train_model(model: nn.Module, train_data: DataLoader, lr=1e-5, val_data: Opt
             # Periodically print the running loss for monitoring the training progress.
         running_loss = running_loss / len(train_data)
         if val_data is not None:
-            val_loss = evaluate(model, val_data)
-            print(f"[{epoch + 1}] loss: {running_loss:.3f} val loss: {val_loss:.3f}")
+            val_loss, val_accuracy = evaluate(model, val_data)
+            print(f"[{epoch + 1}] loss: {running_loss:.3f} val loss: {val_loss:.3f} val accuracy: {val_accuracy:.3f}")
         else:
             print(f"[{epoch + 1}] loss: {running_loss:.3f}")
 
@@ -92,17 +92,25 @@ def evaluate(model, test_dataloader: DataLoader):
         test_dataloader (DataLoader): The test dataset loader containing notes and labels in batches.
 
     Returns:
-        val_loss: The average loss value calculated over the test dataset.
+        val_loss, val_accuracy (Tuple([float, float])): The average loss value calculated over the test dataset.
     """
     # get test data
     loss = 0.0
+    correct = 0
+    total = 0
     with torch.no_grad():
         for data in test_dataloader:
             notes, labels = data
+            total += labels.size(0)
             out = model(notes)
             loss += nn.CrossEntropyLoss()(out, labels)
             _, preds = torch.max(out, 1)
-    return loss / len(test_dataloader)
+            for pred, label in zip(preds, labels):
+                if pred == label:
+                    correct += 1
+    val_loss = loss/len(test_dataloader)
+    val_accuracy = correct / total
+    return val_loss, val_accuracy
 
 
 def test_model(model: nn.Module, test_data: DataLoader, path: Optional[str] = None, classnames=None):
