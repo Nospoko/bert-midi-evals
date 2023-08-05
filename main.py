@@ -6,11 +6,12 @@ import pandas as pd
 import torch.nn as nn
 from torch.utils.data import DataLoader
 
+from utils import plot_loss_curves
 from data.dataset import ComposerClassificationDataset
 from model import PitchSeqNN, PitchSeqNNv2_64, PitchSeqNNv3_64, PitchSeqNNv4_64
 
-BATCH_SIZE = 8
-N_EPOCHS = 50
+BATCH_SIZE = 16
+N_EPOCHS = 30
 SEQUENCE_LENGTH = 64
 
 
@@ -24,7 +25,7 @@ def prepare_samples_pitch_only(dataset: ComposerClassificationDataset):
                                     and 'composer' information.
 
     Returns:
-        samples (list): list of tuples (pitches, label) for ComposerClassificationDataset.samples
+        list: list of tuples (pitches, label) for ComposerClassificationDataset.samples
     """
     df = pd.DataFrame(dataset.samples)
     df = df[["notes", "composer"]]
@@ -43,7 +44,7 @@ def prepare_samples_pitch_only(dataset: ComposerClassificationDataset):
     return samples
 
 
-def train_model(model: nn.Module, train_data: DataLoader, lr=1e-5, val_data: Optional[DataLoader] = None):
+def train_model(model: nn.Module, train_data: DataLoader, lr=1e-5, val_data: Optional[DataLoader] = None, n_epochs=N_EPOCHS):
     """
     Train a classifier using the provided train_data. Evaluates on optional val_data
 
@@ -52,35 +53,63 @@ def train_model(model: nn.Module, train_data: DataLoader, lr=1e-5, val_data: Opt
         train_data (DataLoader): The DataLoader containing the training dataset.
         lr (float, optional): The learning rate for the Adam optimizer. Default is 1e-5.
         val_data (DataLoader, optional): The DataLoader containing the validation dataset. Default is None.
+        n_epochs (int): Number of epochs.
 
     Returns:
         nn.Module: Trained model after completing the training loop.
+        pd.DataFrame: history of training containing loss, accuracy, val_loss and val_accuracy columns
     """
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     criterion = nn.CrossEntropyLoss()
     # training loop
-    for epoch in range(N_EPOCHS):
+    if val_data is not None:
+        history = pd.DataFrame(columns=["loss", "accuracy", "val_loss", "val_accuracy"])
+    else:
+        history = pd.DataFrame(columns=["loss", "accuracy"])
+    for epoch in range(n_epochs):
         running_loss = 0.0
+        correct = 0
+        total = 0
         for i, data in enumerate(train_data, 0):
             inputs, labels = data
-            # comment for accumulating gradients
+            total += labels.size(0)
+
             optimizer.zero_grad()
-            pred = model(inputs)
-            loss = criterion(pred, labels)
+            output = model(inputs)
+            loss = criterion(output, labels)
             loss.backward()
             optimizer.step()
 
+            # calculate accuracy
+            _, preds = torch.max(output, 1)
+            for pred, label in zip(preds, labels):
+                if pred == label:
+                    correct += 1
             running_loss += loss.item()
-            # Periodically print the running loss for monitoring the training progress.
         running_loss = running_loss / len(train_data)
+        running_accuracy = correct / total
+
         if val_data is not None:
             val_loss, val_accuracy = evaluate(model, val_data)
-            print(f"[{epoch + 1}] loss: {running_loss:.3f} val loss: {val_loss:.3f} val accuracy: {val_accuracy:.3f}")
+            history = pd.concat(
+                [
+                    history,
+                    pd.DataFrame(
+                        {"loss": running_loss, "accuracy": running_accuracy, "val_loss": val_loss, "val_accuracy": val_accuracy},
+                        index=[epoch],
+                    ),
+                ]
+            )
+            print(
+                f"[{epoch + 1}] loss: {running_loss:.3f} accuracy: {running_accuracy:.3f}"
+                + f" val_loss: {val_loss:.3f} val_accuracy: {val_accuracy:.3f}"
+            )
         else:
-            print(f"[{epoch + 1}] loss: {running_loss:.3f}")
+            history = pd.concat([history, pd.DataFrame({"loss": running_loss, "accuracy": running_accuracy}, index=[epoch])])
+            print(f"[{epoch + 1}] loss: {running_loss:.3f} accuracy: {running_accuracy:.3f}")
 
     print("Finished Training")
-    return model
+    return model, history
 
 
 def evaluate(model, test_dataloader: DataLoader):
@@ -92,10 +121,14 @@ def evaluate(model, test_dataloader: DataLoader):
         test_dataloader (DataLoader): The test dataset loader containing notes and labels in batches.
 
     Returns:
-        val_loss, val_accuracy (Tuple([float, float])): The average loss value calculated over the test dataset.
+        Returns:
+        tuple: A tuple containing the evaluation results.
+            - val_loss (float): The average loss of the model on the test dataset.
+            - val_accuracy (float): The accuracy of the model on the test dataset, as a percentage.
     """
     # get test data
-    loss = 0.0
+    criterion = nn.CrossEntropyLoss
+    loss_sum = 0
     correct = 0
     total = 0
     with torch.no_grad():
@@ -103,12 +136,13 @@ def evaluate(model, test_dataloader: DataLoader):
             notes, labels = data
             total += labels.size(0)
             out = model(notes)
-            loss += nn.CrossEntropyLoss()(out, labels)
+            loss = criterion(out, labels)
+            loss_sum += loss.item()
             _, preds = torch.max(out, 1)
             for pred, label in zip(preds, labels):
                 if pred == label:
                     correct += 1
-    val_loss = loss / len(test_dataloader)
+    val_loss = loss_sum / len(test_dataloader)
     val_accuracy = correct / total
     return val_loss, val_accuracy
 
@@ -119,8 +153,10 @@ def test_model(model: nn.Module, test_data: DataLoader, path: Optional[str] = No
 
     Args:
         model (PitchSeqNN): The trained ComposerClassifier model to be evaluated.
+        test_data (DataLoader): Data for the model to be tested on
         path (str, optional): If specified, the function will load the model's state from the
                               provided path.
+        classnames (list[str], optional): Classnames for printing results.
     """
     if classnames is None:
         classnames = [0, 1]
@@ -174,9 +210,11 @@ def main():
     train_dataloader = get_dataloader(split="train", sequence_length=64, batch_size=16)
     validation_dataloader = get_dataloader(split="validation", sequence_length=64, batch_size=16)
     test_dataloader = get_dataloader(split="test", sequence_length=64, batch_size=16)
+    # classnames = ComposerClassificationDataset().selected_composers
     for model in models:
-        model = train_model(model, train_data=train_dataloader, lr=3e-4, val_data=validation_dataloader)
+        model, history = train_model(model, train_data=train_dataloader, lr=3e-4, val_data=validation_dataloader)
         losses.append(evaluate(model, test_dataloader))
+        plot_loss_curves(history)
     print(losses)
     torch.save(models[np.argmax(losses)].state_dict(), "best.pth")
 
