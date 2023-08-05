@@ -84,15 +84,15 @@ def train():
 
 def evaluate(model, test_data: ComposerClassificationDataset):
     """
-        Evaluates the performance of a given model
+    Evaluates the performance of a given model
 
-        Args:
-            model (torch.nn.Module): The trained model to be evaluated.
-            test_data (ComposerClassificationDataset): The test dataset containing notes and labels.
+    Args:
+        model (torch.nn.Module): The trained model to be evaluated.
+        test_data (ComposerClassificationDataset): The test dataset containing notes and labels.
 
-        Returns:
-            val_loss: The average loss value calculated over the test dataset.
-        """
+    Returns:
+        val_loss: The average loss value calculated over the test dataset.
+    """
     # get test data
     test_dataloader = DataLoader(test_data, batch_size=BATCH_SIZE, shuffle=True)
     loss = 0.0
@@ -122,7 +122,6 @@ def test_model(model: Optional[nn.Module] = None, path: Optional[str] = None):
     if model is None:
         model = PitchSeqNNv2()
     if path is not None:
-
         model.load_state_dict(torch.load(path))
     # containers for counting prediction
     correct_pred = {classname: 0 for classname in test_data.selected_composers}
@@ -154,7 +153,7 @@ def test_model(model: Optional[nn.Module] = None, path: Optional[str] = None):
 def main():
     torch.manual_seed(78)
     model = train()
-    path = "model1.pth"
+    # path = "model1.pth"
     # torch.save(model.state_dict(), path)
     test_model(model)
 

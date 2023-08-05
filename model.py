@@ -31,9 +31,9 @@ class PitchSeqNNv2(nn.Module):
     (performs poorly - pretty much randomly)
     """
 
-    def __init__(self):
+    def __init__(self, input_size: int = 64):
         super(PitchSeqNNv2, self).__init__()
-        self.dense1 = nn.Linear(64, 128)
+        self.dense1 = nn.Linear(input_size, 128)
         self.dense2 = nn.Linear(128, 64)
         self.dense3 = nn.Linear(64, 2)
 
