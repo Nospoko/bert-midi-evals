@@ -6,12 +6,12 @@ import pandas as pd
 import torch.nn as nn
 from torch.utils.data import DataLoader
 
-from utils import plot_loss_curves
+from model import PitchSeqNN
 from data.dataset import ComposerClassificationDataset
-from model import PitchSeqNN, PitchSeqNNv2_64, PitchSeqNNv3_64, PitchSeqNNv4_64
+from utils import plot_loss_curves, make_confusion_matrix
 
 BATCH_SIZE = 16
-N_EPOCHS = 30
+N_EPOCHS = 1
 SEQUENCE_LENGTH = 64
 
 
@@ -33,11 +33,12 @@ def prepare_samples_pitch_only(dataset: ComposerClassificationDataset):
     df["composer"] = df["composer"].apply(lambda x: 0 if x == dataset.selected_composers[0] else 1)
     # take only ['pitch'] column as an input tensor
     df["pitches"] = df["notes"].apply(lambda x: x["pitch"])
-    # print(df.groupby("composer").size())
     samples = [(torch.tensor(row["pitches"], dtype=torch.float32), torch.tensor(row["composer"])) for _, row in df.iterrows()]
-    # normalization into [-0.5, 0.5)
+
+    # normalization into [-0.5, 0.5]
     for pitches, _ in samples:
         pitches.data = (pitches.data - 64) / 127.0
+
     # pop some of the samples, to fit to batch size
     while len(samples) % BATCH_SIZE != 0:
         samples.pop(-1)
@@ -61,15 +62,19 @@ def train_model(model: nn.Module, train_data: DataLoader, lr=1e-5, val_data: Opt
     """
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     criterion = nn.CrossEntropyLoss()
-    # training loop
+
+    # history container
     if val_data is not None:
         history = pd.DataFrame(columns=["loss", "accuracy", "val_loss", "val_accuracy"])
     else:
         history = pd.DataFrame(columns=["loss", "accuracy"])
+
+    # training loop
     for epoch in range(n_epochs):
         running_loss = 0.0
         correct = 0
         total = 0
+
         for i, data in enumerate(train_data, 0):
             inputs, labels = data
             total += labels.size(0)
@@ -86,6 +91,7 @@ def train_model(model: nn.Module, train_data: DataLoader, lr=1e-5, val_data: Opt
                 if pred == label:
                     correct += 1
             running_loss += loss.item()
+
         running_loss = running_loss / len(train_data)
         running_accuracy = correct / total
 
@@ -95,7 +101,12 @@ def train_model(model: nn.Module, train_data: DataLoader, lr=1e-5, val_data: Opt
                 [
                     history,
                     pd.DataFrame(
-                        {"loss": running_loss, "accuracy": running_accuracy, "val_loss": val_loss, "val_accuracy": val_accuracy},
+                        data={
+                            "loss": running_loss,
+                            "accuracy": running_accuracy,
+                            "val_loss": val_loss,
+                            "val_accuracy": val_accuracy,
+                        },
                         index=[epoch],
                     ),
                 ]
@@ -127,10 +138,12 @@ def evaluate(model, test_dataloader: DataLoader):
             - val_accuracy (float): The accuracy of the model on the test dataset, as a percentage.
     """
     # get test data
-    criterion = nn.CrossEntropyLoss
+    criterion = nn.CrossEntropyLoss()
+
     loss_sum = 0
     correct = 0
     total = 0
+    # test
     with torch.no_grad():
         for data in test_dataloader:
             notes, labels = data
@@ -138,56 +151,37 @@ def evaluate(model, test_dataloader: DataLoader):
             out = model(notes)
             loss = criterion(out, labels)
             loss_sum += loss.item()
-            _, preds = torch.max(out, 1)
-            for pred, label in zip(preds, labels):
-                if pred == label:
-                    correct += 1
+            preds = out.argmax(1)
+            correct += (preds == labels).sum()
     val_loss = loss_sum / len(test_dataloader)
     val_accuracy = correct / total
     return val_loss, val_accuracy
 
 
-def test_model(model: nn.Module, test_data: DataLoader, path: Optional[str] = None, classnames=None):
+def test_model(model: nn.Module, test_data: DataLoader):
     """
-    Evaluate the performance of the trained ComposerClassifier model with the provided test data loader.
+    Test the performance of the trained ComposerClassifier model with the provided test data loader
+    .by plotting a confusion matrix.
 
     Args:
         model (PitchSeqNN): The trained ComposerClassifier model to be evaluated.
         test_data (DataLoader): Data for the model to be tested on
-        path (str, optional): If specified, the function will load the model's state from the
-                              provided path.
-        classnames (list[str], optional): Classnames for printing results.
     """
-    if classnames is None:
-        classnames = [0, 1]
-    # if path is specified load state from file
-    if path is not None:
-        model.load_state_dict(torch.load(path))
-    # containers for counting prediction
-    correct_pred = {classname: 0 for classname in classnames}
-    total_pred = {classname: 0 for classname in classnames}
-    correct = 0
-    total = 0
+    classnames = test_data.dataset.selected_composers
+    # containers for predictions and truths:
+    predicted = torch.tensor([])
+    true = torch.tensor([])
     with torch.no_grad():
         for data in test_data:
             notes, labels = data
             out = model(notes)
-            loss = nn.CrossEntropyLoss()(out, labels)
-            print(loss)
-            _, preds = torch.max(out, 1)
-            correct += (preds == labels).sum().item()
-            total += labels.size(0)
+            preds = out.argmax(1)
 
-            for label, pred in zip(labels, preds):
-                if label == pred:
-                    correct_pred[classnames[label]] += 1
-                total_pred[classnames[label]] += 1
-    for classname, correct_count in correct_pred.items():
-        accuracy = 100 * float(correct_count) / total_pred[classname]
-        print(f"Accuracy for class: {classname:5s} is {accuracy:.1f} %")
-    print(f"Accuracy of the network on the test data: {(100 * correct / total):.3f} %")
-    print(f"correctly predicted : {correct_pred}")
-    return correct / total
+            predicted = torch.concatenate((predicted, preds))
+            true = torch.concatenate((true, labels))
+
+    # plot a confusion matrix with all the predictions from test data
+    make_confusion_matrix(true, predicted, classes=classnames)
 
 
 def get_dataloader(split="train", sequence_length=64, batch_size=BATCH_SIZE):
@@ -205,18 +199,26 @@ def get_dataloader(split="train", sequence_length=64, batch_size=BATCH_SIZE):
 
 
 def main():
-    models = [PitchSeqNN(), PitchSeqNNv2_64(), PitchSeqNNv3_64(), PitchSeqNNv4_64()]
-    losses = []
+    # Versions to check
+    model_layers = [[64, 128, 64, 32, 8, 2], [64, 128, 256, 64, 2]]
+
+    # Data to use
     train_dataloader = get_dataloader(split="train", sequence_length=64, batch_size=16)
     validation_dataloader = get_dataloader(split="validation", sequence_length=64, batch_size=16)
     test_dataloader = get_dataloader(split="test", sequence_length=64, batch_size=16)
-    # classnames = ComposerClassificationDataset().selected_composers
-    for model in models:
+
+    # Check each version
+    results = []
+    for layers in model_layers:
+        model = PitchSeqNN(layers)
         model, history = train_model(model, train_data=train_dataloader, lr=3e-4, val_data=validation_dataloader)
-        losses.append(evaluate(model, test_dataloader))
+
+        results.append(evaluate(model, test_dataloader))
         plot_loss_curves(history)
-    print(losses)
-    torch.save(models[np.argmax(losses)].state_dict(), "best.pth")
+        test_model(model, test_dataloader)
+
+    print(results)
+    print(model_layers[np.argmin(results[:, 0])])
 
 
 if __name__ == "__main__":
