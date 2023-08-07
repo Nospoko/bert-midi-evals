@@ -1,5 +1,6 @@
 from typing import Callable
 
+import wandb
 import torch.optim
 import torch.nn as nn
 from tqdm import tqdm
@@ -19,6 +20,16 @@ def main():
     train_dataloader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True)
     v_dataloader = DataLoader(v_dataset, batch_size=BATCH_SIZE)
 
+    wandb.init(
+        project="MIDI-18-bag-of-pitches",
+        config={
+            "learning_rate": LR,
+            "n_epochs": N_EPOCHS,
+            "architecture": "NN",
+            "batch_size": BATCH_SIZE
+        }
+    )
+
     model = PitchSeqNN([128, 256, 128, 64, 2])
     optimizer = torch.optim.Adam(model.parameters(), lr=LR)
 
@@ -37,11 +48,14 @@ def main():
             model=model,
             criterion=criterion,
         )
-        bar = "Train: loss={t_loss:.3f}, acc={t_acc:.2f}, Val: loss={v_loss:.3f}, acc={v_acc:.2f}".format(
+
+        wandb.log({**train_stats, **v_stats})
+
+        bar = "loss={t_loss:.3f}, acc={t_acc:.2f}, val_loss={v_loss:.3f}, val_acc={v_acc:.2f}".format(
             t_loss=train_stats["loss"],
             t_acc=train_stats["accuracy"],
-            v_loss=v_stats["loss"],
-            v_acc=v_stats["accuracy"],
+            v_loss=v_stats["val_loss"],
+            v_acc=v_stats["val_accuracy"],
         )
         pbar.set_description(bar)
 
@@ -97,8 +111,8 @@ def validation_epoch(
     v_loss = v_loss / len(loader)
     accuracy = correct / len(loader.dataset)
     stats = {
-        "loss": v_loss,
-        "accuracy": accuracy,
+        "val_loss": v_loss,
+        "val_accuracy": accuracy,
     }
     return stats
 
