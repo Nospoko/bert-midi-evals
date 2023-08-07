@@ -51,3 +51,23 @@ class ComposerClassificationDataset:
 
     def __getitem__(self, idx: int):
         return self.samples[idx]
+
+
+class BagOfPitches(ComposerClassificationDataset):
+    def __getitem__(self, idx: int):
+        pitch = self.samples[idx]["notes"]["pitch"]
+
+        histogram = [pitch.count(it) for it in range(128)]
+
+        # For seq len 64, 44 is the maximum count of a note in the train split, wtf
+        data = torch.tensor(histogram).float() / 44
+        composer = self.samples[idx]["composer"]
+        label = self.selected_composers.index(composer)
+
+        sample = {
+            "data": data,
+            "label": label,
+            "composer": composer,
+        }
+
+        return sample
