@@ -1,35 +1,42 @@
+import uuid
 from typing import Callable
 
+import hydra
 import torch.optim
 import torch.nn as nn
 from tqdm import tqdm
 from torch.utils.data import DataLoader
 
 import wandb
+from config import Config
 from model import PitchSeqNN
 from data.dataset import BagOfPitches
 
-BATCH_SIZE = 32
-N_EPOCHS = 50
-LR = 1e-4
 
-
-def main():
+@hydra.main(config_path="conf", config_name="config")
+def main(cfg: Config):
     dataset = BagOfPitches()
     v_dataset = BagOfPitches(split="validation")
-    train_dataloader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True)
-    v_dataloader = DataLoader(v_dataset, batch_size=BATCH_SIZE)
+    train_dataloader = DataLoader(dataset, batch_size=cfg.hyperparameters.batch_size, shuffle=True)
+    v_dataloader = DataLoader(v_dataset, batch_size=cfg.hyperparameters.batch_size)
 
+    run_id = str(uuid.uuid1())[:8]
     wandb.init(
         project="MIDI-18-bag-of-pitches",
-        config={"learning_rate": LR, "n_epochs": N_EPOCHS, "architecture": "NN", "batch_size": BATCH_SIZE},
+        name=f"{cfg.logger.run_name}-{run_id}",
+        config={
+            "learning_rate": cfg.hyperparameters.lr,
+            "n_epochs": cfg.hyperparameters.num_epochs,
+            "architecture": "NN",
+            "batch_size": cfg.hyperparameters.batch_size,
+        },
     )
 
-    model = PitchSeqNN([128, 256, 128, 64, 2])
-    optimizer = torch.optim.Adam(model.parameters(), lr=LR)
+    model = PitchSeqNN(cfg.model.layers)
+    optimizer = torch.optim.Adam(model.parameters(), lr=cfg.hyperparameters.lr)
 
     criterion = nn.CrossEntropyLoss()
-    pbar = tqdm(range(N_EPOCHS), desc="Training started!")
+    pbar = tqdm(range(cfg.hyperparameters.num_epochs), desc="Training started!")
     for epoch in pbar:
         train_stats = training_epoch(
             train_dataloader=train_dataloader,
