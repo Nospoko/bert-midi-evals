@@ -1,11 +1,11 @@
 from typing import Callable
 
-import wandb
 import torch.optim
 import torch.nn as nn
 from tqdm import tqdm
 from torch.utils.data import DataLoader
 
+import wandb
 from model import PitchSeqNN
 from data.dataset import BagOfPitches
 
@@ -22,12 +22,7 @@ def main():
 
     wandb.init(
         project="MIDI-18-bag-of-pitches",
-        config={
-            "learning_rate": LR,
-            "n_epochs": N_EPOCHS,
-            "architecture": "NN",
-            "batch_size": BATCH_SIZE
-        }
+        config={"learning_rate": LR, "n_epochs": N_EPOCHS, "architecture": "NN", "batch_size": BATCH_SIZE},
     )
 
     model = PitchSeqNN([128, 256, 128, 64, 2])
