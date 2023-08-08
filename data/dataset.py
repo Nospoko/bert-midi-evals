@@ -7,14 +7,14 @@ class ComposerClassificationDataset:
     def __init__(
         self,
         split: str = "train",
-        sequence_length: int = 60,
-        selected_composers: list[str] = ["Frédéric Chopin", "Johann Sebastian Bach"],
+        sequence_length: int = 64,
+        # chose these composers due to the similar total number of notes in maestro dataset
+        selected_composers: list[str] = ["Frédéric Chopin", "Ludwig van Beethoven"],
     ):
         self.sequence_length = sequence_length
         self.selected_composers = selected_composers
         self.dataset = load_dataset("roszcz/maestro-v1-sustain", split=split)
         self.df = pd.DataFrame(self.dataset.select_columns(["composer", "title"]))
-
         self._build()
 
     def _build(self):
