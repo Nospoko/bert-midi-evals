@@ -7,11 +7,11 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 
 from model import PitchSeqNN
+from utils import test_model, plot_loss_curves
 from data.dataset import ComposerClassificationDataset
-from utils import plot_loss_curves, make_confusion_matrix
 
 BATCH_SIZE = 16
-N_EPOCHS = 1
+N_EPOCHS = 25
 SEQUENCE_LENGTH = 64
 
 
@@ -86,7 +86,7 @@ def train_model(model: nn.Module, train_data: DataLoader, lr=1e-5, val_data: Opt
             optimizer.step()
 
             # calculate accuracy
-            _, preds = torch.max(output, 1)
+            preds = output.argmax(1)
             for pred, label in zip(preds, labels):
                 if pred == label:
                     correct += 1
@@ -156,32 +156,6 @@ def evaluate(model, test_dataloader: DataLoader):
     val_loss = loss_sum / len(test_dataloader)
     val_accuracy = correct / total
     return val_loss, val_accuracy
-
-
-def test_model(model: nn.Module, test_data: DataLoader):
-    """
-    Test the performance of the trained ComposerClassifier model with the provided test data loader
-    .by plotting a confusion matrix.
-
-    Args:
-        model (PitchSeqNN): The trained ComposerClassifier model to be evaluated.
-        test_data (DataLoader): Data for the model to be tested on
-    """
-    classnames = test_data.dataset.selected_composers
-    # containers for predictions and truths:
-    predicted = torch.tensor([])
-    true = torch.tensor([])
-    with torch.no_grad():
-        for data in test_data:
-            notes, labels = data
-            out = model(notes)
-            preds = out.argmax(1)
-
-            predicted = torch.concatenate((predicted, preds))
-            true = torch.concatenate((true, labels))
-
-    # plot a confusion matrix with all the predictions from test data
-    make_confusion_matrix(true, predicted, classes=classnames)
 
 
 def get_dataloader(split="train", sequence_length=64, batch_size=BATCH_SIZE):
