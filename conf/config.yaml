@@ -1,10 +1,8 @@
 hyperparameters:
-  num_epochs: 50
-  batch_size: 16
-  lr: 3e-5
-
+  num_epochs: 30
+  batch_size: 32
+  lr: 8e-5
 model:
-  layers: [128, 128, 64, 64, 2]
-
+  layers: [128, 128, 256, 64, 2]
 logger:
-  run_name: 'run1'
+  run_name: "run-1"
