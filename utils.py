@@ -1,8 +1,11 @@
 import itertools
 
+import torch
 import numpy as np
 import pandas as pd
+import torch.nn as nn
 import matplotlib.pyplot as plt
+from torch.utils.data import DataLoader
 from sklearn.metrics import confusion_matrix
 
 
@@ -108,3 +111,30 @@ def make_confusion_matrix(y_true, y_pred, classes=None, figsize=(10, 10), text_s
                 size=text_size,
             )
     plt.show()
+
+
+def test_model(model: nn.Module, test_data: DataLoader):
+    """
+    Test the performance of the trained ComposerClassifier model with the provided test data loader
+    .by plotting a confusion matrix.
+
+    Args:
+        model (PitchSeqNN): The trained ComposerClassifier model to be evaluated.
+        test_data (DataLoader): Data for the model to be tested on
+    Returns:
+        Tupre[int, int]: Tuple of (true_labels, predicted_labels)
+    """
+    # containers for predictions and truths:
+    predicted = torch.tensor([])
+    true = torch.tensor([])
+    with torch.no_grad():
+        for data in test_data:
+            notes, labels = data
+            out = model(notes)
+            preds = out.argmax(1)
+
+            predicted = torch.concatenate((predicted, preds))
+            true = torch.concatenate((true, labels))
+
+    # plot a confusion matrix with all the predictions from test data
+    return true, predicted
