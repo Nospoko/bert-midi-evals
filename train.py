@@ -6,8 +6,8 @@ import hydra
 import torch.optim
 import torch.nn as nn
 from tqdm import tqdm
-from omegaconf import DictConfig
 from torch.utils.data import DataLoader
+from omegaconf import OmegaConf, DictConfig
 
 import wandb
 from model import PitchSeqNN
@@ -16,11 +16,29 @@ from data.dataset import BagOfPitches
 
 @hydra.main(version_base=None, config_path="conf", config_name="config")
 def main(cfg: DictConfig):
+    composer_comparison_main(cfg)
+
+
+def one_run(cfg: DictConfig):
+    """
+    Function for testing
+    """
     # loading data
     dataset = BagOfPitches()
     v_dataset = BagOfPitches(split="validation")
     train_dataloader = DataLoader(dataset, batch_size=cfg.hyperparameters.batch_size, shuffle=True)
     v_dataloader = DataLoader(v_dataset, batch_size=cfg.hyperparameters.batch_size)
+    run_experiment(
+        cfg, train_data=train_dataloader, val_data=v_dataloader, classnames=["Frédéric Chopin", "Johann Sebastian Bach"]
+    )
+
+
+def composer_comparison_main(cfg: DictConfig):
+    """
+    Finds composers with at least 10 pieces in the database, then trains model for each pair by calling run_experiment
+    """
+    # loading data
+    dataset = BagOfPitches()
 
     # get composers to classify against each other
     count = dataset.df.groupby(["composer"]).size()
@@ -34,11 +52,19 @@ def main(cfg: DictConfig):
 
     # train model for each pair
     for pair in composers:
+        # loading data
+        dataset = BagOfPitches(selected_composers=pair)
+        v_dataset = BagOfPitches(split="validation", selected_composers=pair)
+        train_dataloader = DataLoader(dataset, batch_size=cfg.hyperparameters.batch_size, shuffle=True)
+        v_dataloader = DataLoader(v_dataset, batch_size=cfg.hyperparameters.batch_size)
+
         print(f"{pair[0]} vs {pair[1]}")
         model = run_experiment(cfg=cfg, train_data=train_dataloader, val_data=v_dataloader, classnames=pair)
         models.append((model, pair))
-        path = f"models/{pair[0].replace(' ', '_').lower()}-{pair[1].replace(' ', '_').lower()}.pth"
-        if cfg.model.save_model == 'y':
+        first_composer = pair[0].replace(" ", "_").lower()
+        other_composer = pair[1].replace(" ", "_").lower()
+        path = f"models/{first_composer}-{other_composer}.pth"
+        if cfg.model.save_model == "y":
             torch.save(model.state_dict(), path)
 
 
@@ -60,14 +86,9 @@ def run_experiment(cfg: DictConfig, train_data: DataLoader, val_data: DataLoader
     """
     run_id = str(uuid.uuid1())[:8]
     run = wandb.init(
-        project="MIDI-18-bag-of-pitches",
+        project="MIDI-18-bag-of-pitches-composer-pairs",
         name=f"{classnames[0].replace(' ', '_')}_vs_{classnames[1].replace(' ', '_')}-{run_id}",
-        config={
-            "learning_rate": cfg.hyperparameters.lr,
-            "n_epochs": cfg.hyperparameters.num_epochs,
-            "architecture": "NN",
-            "batch_size": cfg.hyperparameters.batch_size,
-        },
+        config=OmegaConf.to_container(cfg, resolve=True),
     )
     print("\n" + str(cfg.model.layers))
 

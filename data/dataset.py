@@ -10,7 +10,7 @@ class ComposerClassificationDataset:
         split: str = "train",
         sequence_length: int = 64,
         # chose these composers due to the similar total number of notes in maestro dataset
-        selected_composers: list[str] = ["Frédéric Chopin", "Ludwig van Beethoven"],
+        selected_composers: list[str] = ["Frédéric Chopin", "Johann Sebastian Bach"],
     ):
         self.sequence_length = sequence_length
         self.selected_composers = selected_composers
@@ -119,7 +119,7 @@ class BagOfPitches(ComposerClassificationDataset):
     # Robert Schumann            112256
     # Sergei Rachmaninoff         70144
     # Wolfgang Amadeus Mozart     34688
-
+    #
     # pieces of composers:
     # Alexander Scriabin          22 # val: None
     # Claude Debussy              37
