@@ -1,9 +1,6 @@
-# import itertools
-
 import torch
 import numpy as np
 import pandas as pd
-from tqdm import tqdm
 from datasets import load_dataset
 
 
@@ -64,7 +61,7 @@ class BagOfPitches(ComposerClassificationDataset):
         histogram = [pitch.count(it) for it in range(128)]
 
         # For seq len 64, 44 is the maximum count of a note in the train split, wtf
-        data = torch.tensor(histogram).float() / 64 # found out there is a sample with 64 same notes :O
+        data = torch.tensor(histogram).float() / 64  # found out there is a sample with 64 same notes :O
         composer = self.samples[idx]["composer"]
         label = self.selected_composers.index(composer)
 
@@ -122,7 +119,6 @@ class BagOfPitches(ComposerClassificationDataset):
     # Robert Schumann            112256
     # Sergei Rachmaninoff         70144
     # Wolfgang Amadeus Mozart     34688
-
 
     # pieces of composers:
     # Alexander Scriabin          22 # val: None

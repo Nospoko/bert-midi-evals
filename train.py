@@ -14,11 +14,54 @@ from model import PitchSeqNN
 from data.dataset import BagOfPitches
 
 
-def run_one_experiment(cfg: DictConfig, train_data, val_data):
+@hydra.main(version_base=None, config_path="conf", config_name="config")
+def main(cfg: DictConfig):
+    # loading data
+    dataset = BagOfPitches()
+    v_dataset = BagOfPitches(split="validation")
+    train_dataloader = DataLoader(dataset, batch_size=cfg.hyperparameters.batch_size, shuffle=True)
+    v_dataloader = DataLoader(v_dataset, batch_size=cfg.hyperparameters.batch_size)
+
+    # get composers to classify against each other
+    count = dataset.df.groupby(["composer"]).size()
+    composers_with_most_data = count[count.values > 10]
+    composers_to_check = composers_with_most_data.index.tolist()
+    composers = [pair for pair in itertools.combinations(composers_to_check, r=2)]
+    print(f"pairs to check: {len(composers)}")
+
+    # container for trained models
+    models = []
+
+    # train model for each pair
+    for pair in composers:
+        print(f"{pair[0]} vs {pair[1]}")
+        model = run_experiment(cfg=cfg, train_data=train_dataloader, val_data=v_dataloader, classnames=pair)
+        models.append((model, pair))
+        path = f"models/{pair[0].replace(' ', '_').lower()}-{pair[1].replace(' ', '_').lower()}.pth"
+        if cfg.model.save_model:
+            torch.save(model.state_dict(), path)
+
+
+def run_experiment(cfg: DictConfig, train_data: DataLoader, val_data: DataLoader, classnames: list):
+    """
+    Run an experiment using the provided configuration and data.
+
+    Parameters:
+        cfg (DictConfig): Configuration containing hyperparameters and model specifications.
+        train_data (DataLoader): DataLoader for the training dataset.
+        val_data (DataLoader): DataLoader for the validation dataset.
+        classnames (Tuple[str, str]): A dictionary containing the class names corresponding to their indices.
+
+    Returns:
+        PitchSeqNN: The trained PitchSeqNN model.
+
+    This function initializes an experiment on WandB, initializes the model and optimizer, and performs
+    the training and validation loops. It logs the training and validation statistics to WandB.
+    """
     run_id = str(uuid.uuid1())[:8]
-    wandb.init(
+    run = wandb.init(
         project="MIDI-18-bag-of-pitches",
-        name=f"{cfg.logger.run_name}-{run_id}",
+        name=f"{classnames[0]}-vs-{classnames[1]}-{run_id}",
         config={
             "learning_rate": cfg.hyperparameters.lr,
             "n_epochs": cfg.hyperparameters.num_epochs,
@@ -26,6 +69,7 @@ def run_one_experiment(cfg: DictConfig, train_data, val_data):
             "batch_size": cfg.hyperparameters.batch_size,
         },
     )
+    print("\n" + str(cfg.model.layers))
 
     model = PitchSeqNN(cfg.model.layers)
     optimizer = torch.optim.Adam(model.parameters(), lr=cfg.hyperparameters.lr)
@@ -46,7 +90,7 @@ def run_one_experiment(cfg: DictConfig, train_data, val_data):
             criterion=criterion,
         )
 
-        wandb.log({**train_stats, **v_stats})
+        run.log({**train_stats, **v_stats})
 
         bar = "loss={t_loss:.3f}, acc={t_acc:.2f}, val_loss={v_loss:.3f}, val_acc={v_acc:.2f}".format(
             t_loss=train_stats["loss"],
@@ -55,61 +99,8 @@ def run_one_experiment(cfg: DictConfig, train_data, val_data):
             v_acc=v_stats["val_accuracy"],
         )
         pbar.set_description(bar)
-
-
-@hydra.main(version_base=None, config_path="conf", config_name="config")
-def main(cfg: DictConfig):
-    dataset = BagOfPitches()
-    v_dataset = BagOfPitches(split="validation")
-    train_dataloader = DataLoader(dataset, batch_size=cfg.hyperparameters.batch_size, shuffle=True)
-    v_dataloader = DataLoader(v_dataset, batch_size=cfg.hyperparameters.batch_size)
-    count = dataset.df.groupby(["composer"]).size()
-    composers_with_most_data = count[count.values > 10]
-    composers_to_check = composers_with_most_data.index.tolist()
-    composers = [pair for pair in itertools.combinations(composers_to_check, r=2)]
-    print(f"pairs to check: {len(composers)}")
-    for pair in composers:
-        print(f"{pair[0]} vs {pair[1]}")
-        run_id = str(uuid.uuid1())[:8]
-        wandb.init(
-            project="MIDI-18-different-composers",
-            name=f"{pair[0]}-vs-{pair[1]}-{run_id}",
-            config={
-                "learning_rate": cfg.hyperparameters.lr,
-                "n_epochs": cfg.hyperparameters.num_epochs,
-                "architecture": "NN",
-                "batch_size": cfg.hyperparameters.batch_size,
-            },
-        )
-
-        model = PitchSeqNN(cfg.model.layers)
-        optimizer = torch.optim.Adam(model.parameters(), lr=cfg.hyperparameters.lr)
-
-        criterion = nn.CrossEntropyLoss()
-        pbar = tqdm(range(cfg.hyperparameters.num_epochs), desc="Training started!")
-        for epoch in pbar:
-            train_stats = training_epoch(
-                train_dataloader=train_dataloader,
-                optimizer=optimizer,
-                model=model,
-                criterion=criterion,
-            )
-
-            v_stats = validation_epoch(
-                loader=v_dataloader,
-                model=model,
-                criterion=criterion,
-            )
-
-            wandb.log({**train_stats, **v_stats})
-
-            bar = "loss={t_loss:.3f}, acc={t_acc:.2f}, val_loss={v_loss:.3f}, val_acc={v_acc:.2f}".format(
-                t_loss=train_stats["loss"],
-                t_acc=train_stats["accuracy"],
-                v_loss=v_stats["val_loss"],
-                v_acc=v_stats["val_accuracy"],
-            )
-            pbar.set_description(bar)
+    run.finish()
+    return model
 
 
 def training_epoch(
