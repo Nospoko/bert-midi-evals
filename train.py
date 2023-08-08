@@ -61,7 +61,7 @@ def run_experiment(cfg: DictConfig, train_data: DataLoader, val_data: DataLoader
     run_id = str(uuid.uuid1())[:8]
     run = wandb.init(
         project="MIDI-18-bag-of-pitches",
-        name=f"{classnames[0].replace(' ', '-')}-vs-{classnames[1].replace(' ', '-')}-{run_id}",
+        name=f"{classnames[0].replace(' ', '_')}_vs_{classnames[1].replace(' ', '_')}-{run_id}",
         config={
             "learning_rate": cfg.hyperparameters.lr,
             "n_epochs": cfg.hyperparameters.num_epochs,
