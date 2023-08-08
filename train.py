@@ -50,7 +50,7 @@ def run_experiment(cfg: DictConfig, train_data: DataLoader, val_data: DataLoader
         cfg (DictConfig): Configuration containing hyperparameters and model specifications.
         train_data (DataLoader): DataLoader for the training dataset.
         val_data (DataLoader): DataLoader for the validation dataset.
-        classnames (Tuple[str, str]): A dictionary containing the class names corresponding to their indices.
+        classnames (list[str]): A list containing the class names corresponding to their indices.
 
     Returns:
         PitchSeqNN: The trained PitchSeqNN model.
