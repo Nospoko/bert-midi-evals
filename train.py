@@ -38,7 +38,7 @@ def main(cfg: DictConfig):
         model = run_experiment(cfg=cfg, train_data=train_dataloader, val_data=v_dataloader, classnames=pair)
         models.append((model, pair))
         path = f"models/{pair[0].replace(' ', '_').lower()}-{pair[1].replace(' ', '_').lower()}.pth"
-        if cfg.model.save_model:
+        if cfg.model.save_model == 'y':
             torch.save(model.state_dict(), path)
 
 
@@ -61,7 +61,7 @@ def run_experiment(cfg: DictConfig, train_data: DataLoader, val_data: DataLoader
     run_id = str(uuid.uuid1())[:8]
     run = wandb.init(
         project="MIDI-18-bag-of-pitches",
-        name=f"{classnames[0]}-vs-{classnames[1]}-{run_id}",
+        name=f"{classnames[0].replace(' ', '-')}-vs-{classnames[1].replace(' ', '-')}-{run_id}",
         config={
             "learning_rate": cfg.hyperparameters.lr,
             "n_epochs": cfg.hyperparameters.num_epochs,
