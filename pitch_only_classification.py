@@ -7,7 +7,7 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 
 from model import PitchSeqNN
-from utils import test_model, plot_loss_curves
+from utils import plot_loss_curves
 from data.dataset import ComposerClassificationDataset
 
 BATCH_SIZE = 16
@@ -123,6 +123,33 @@ def train_model(model: nn.Module, train_data: DataLoader, lr=1e-5, val_data: Opt
     return model, history
 
 
+def test_model(model: nn.Module, test_data: DataLoader):
+    """
+    Test the performance of the trained ComposerClassifier model with the provided test data loader
+    .by plotting a confusion matrix.
+
+    Args:
+        model (PitchSeqNN): The trained ComposerClassifier model to be evaluated.
+        test_data (DataLoader): Data for the model to be tested on
+    Returns:
+        Tupre[int, int]: Tuple of (true_labels, predicted_labels)
+    """
+    # containers for predictions and truths:
+    predicted = torch.tensor([])
+    true = torch.tensor([])
+    with torch.no_grad():
+        for data in test_data:
+            notes, labels = data
+            out = model(notes)
+            preds = out.argmax(1)
+
+            predicted = torch.concatenate((predicted, preds))
+            true = torch.concatenate((true, labels))
+
+    # plot a confusion matrix with all the predictions from test data
+    return true, predicted
+
+
 def evaluate(model, test_dataloader: DataLoader):
     """
     Evaluates the performance of a given model
@@ -184,7 +211,7 @@ def main():
     # Check each version
     results = []
     for layers in model_layers:
-        model = PitchSeqNN(layers)
+        model = PitchSeqNN(layers, 64, 2)
         model, history = train_model(model, train_data=train_dataloader, lr=3e-4, val_data=validation_dataloader)
 
         results.append(evaluate(model, test_dataloader))

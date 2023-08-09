@@ -1,4 +1,5 @@
 import uuid
+import os.path
 import itertools
 from typing import Callable
 
@@ -12,11 +13,54 @@ from omegaconf import OmegaConf, DictConfig
 import wandb
 from model import PitchSeqNN
 from data.dataset import BagOfPitches
+from utils import test_model, make_confusion_matrix
 
 
 @hydra.main(version_base=None, config_path="conf", config_name="config")
-def main(cfg: DictConfig):
-    composer_comparison_main(cfg)
+def main(cfg: DictConfig):  # base_acc
+    composers = [
+        ["Alexander Scriabin", "Johann Sebastian Bach"],  # 0.58
+        ["Franz Liszt", "Johann Sebastian Bach"],  # 0.76
+        ["Alexander Scriabin", "Sergei Rachmaninoff"],  # 0.63
+        ["Robert Schumann", "Sergei Rachmaninoff"],  # 0.54
+        ["Robert Schumann", "Ludwig van Beethoven"],  # 0.59
+        ["Alexander Scriabin", "Johann Sebastian Bach", "Franz Liszt", "Ludwig van Beethoven"],
+    ]
+    for classnames in composers:
+        print(classnames)
+        print(test_and_confusion_matrix_main(cfg, classnames))
+
+
+def test_and_confusion_matrix_main(cfg: DictConfig, classnames: list[str]):
+    """
+    Evaluate a neural network model on test data, generate a confusion matrix,
+    and return the validation loss and accuracy.
+
+    Args:
+        cfg (DictConfig): Configuration settings for the experiment.
+        classnames (list[str]): List of class names or labels.
+
+    Returns:
+        Dict: Validation loss and accuracy achieved on the test data.
+    """
+    path = classnames[0].replace(" ", "_").lower()
+    for classname in classnames[1:]:
+        path += f"-{classname.replace(' ', '_').lower()}"
+    path += ".pth"
+    if not os.path.isfile(f"models/{path}"):
+        model = run_experiment(cfg, "MIDI-18-bag-of-pitches-pairs", classnames=classnames)
+        if cfg.model.save_model == "y":
+            torch.save(model.state_dict(), f"models/{path}.pth")
+    else:
+        model = PitchSeqNN(cfg.model.hidden_layers, 128, len(classnames))
+        model.load_state_dict(torch.load("models/scriabin-bach.pth"))
+
+    test_data = BagOfPitches(split="test", selected_composers=classnames)
+    test_dataloader = DataLoader(test_data, batch_size=cfg.hyperparameters.batch_size, shuffle=True)
+
+    true, pred = test_model(model, test_data=test_dataloader)
+    make_confusion_matrix(y_true=true, y_pred=pred, classes=classnames)
+    return validation_epoch(loader=test_dataloader, model=model, criterion=nn.CrossEntropyLoss())
 
 
 def one_run(cfg: DictConfig):
@@ -43,14 +87,14 @@ def composer_comparison_main(cfg: DictConfig):
     composers_to_check = find_composers_to_check()
     composers = [pair for pair in itertools.combinations(composers_to_check, r=2)]
     print(f"pairs to check: {len(composers)}")
-
+    project = "MIDI-18-bag-of-pitches-pairs"
     # container for trained models
     models = []
 
     # train model for each pair
     for pair in composers:
         print(f"{pair[0]} vs {pair[1]}")
-        model = run_experiment(cfg=cfg, classnames=pair)
+        model = run_experiment(cfg=cfg, project=project, classnames=pair)
         models.append((model, pair))
         first_composer = pair[0].replace(" ", "_").lower()
         other_composer = pair[1].replace(" ", "_").lower()
@@ -90,7 +134,7 @@ def initialize_wandb(cfg: DictConfig, project: str, classnames: list[str]):
     return run
 
 
-def run_experiment(cfg: DictConfig, classnames: list[str]):
+def run_experiment(cfg: DictConfig, project, classnames: list[str]):
     """
     Run an experiment using the provided configuration and classnames from the dataset.
 
@@ -111,10 +155,10 @@ def run_experiment(cfg: DictConfig, classnames: list[str]):
     v_dataloader = DataLoader(v_dataset, batch_size=cfg.hyperparameters.batch_size)
 
     # initialize experiment on WandB with unique run id
-    run = initialize_wandb(cfg, classnames)
+    run = initialize_wandb(cfg, project, classnames)
 
     # initialize model, optimizer and loss criterion
-    model = PitchSeqNN(cfg.model.layers)
+    model = PitchSeqNN(cfg.model.hidden_layers, 128, len(classnames))
     optimizer = torch.optim.Adam(model.parameters(), lr=cfg.hyperparameters.lr)
     criterion = nn.CrossEntropyLoss()
 

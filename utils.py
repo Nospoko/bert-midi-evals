@@ -1,4 +1,5 @@
 import itertools
+from typing import Optional
 
 import torch
 import numpy as np
@@ -42,7 +43,7 @@ def plot_loss_curves(history: pd.DataFrame):
     plt.show()
 
 
-def make_confusion_matrix(y_true, y_pred, classes=None, figsize=(10, 10), text_size=15, norm=False):
+def make_confusion_matrix(y_true, y_pred, classes: Optional[list[str]] = None, figsize=(16, 10), text_size=15, norm=False):
     """Makes a labelled confusion matrix comparing predictions and ground truth labels.
 
     If classes is passed, confusion matrix will be labelled, if not, integer class values
@@ -111,6 +112,11 @@ def make_confusion_matrix(y_true, y_pred, classes=None, figsize=(10, 10), text_s
                 size=text_size,
             )
     plt.show()
+    # path = str()
+    # for name in classes:
+    #     path += name.replace(' ', '-').lower()
+    # path += '.png'
+    # plt.savefig(f"plots/{path}")
 
 
 def test_model(model: nn.Module, test_data: DataLoader):
@@ -128,9 +134,9 @@ def test_model(model: nn.Module, test_data: DataLoader):
     predicted = torch.tensor([])
     true = torch.tensor([])
     with torch.no_grad():
-        for data in test_data:
-            notes, labels = data
-            out = model(notes)
+        for samples in test_data:
+            labels = samples["label"]
+            out = model(samples["data"])
             preds = out.argmax(1)
 
             predicted = torch.concatenate((predicted, preds))
