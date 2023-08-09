@@ -23,27 +23,24 @@ def one_run(cfg: DictConfig):
     """
     Function for testing
     """
-    # loading data
-    dataset = BagOfPitches()
-    v_dataset = BagOfPitches(split="validation")
-    train_dataloader = DataLoader(dataset, batch_size=cfg.hyperparameters.batch_size, shuffle=True)
-    v_dataloader = DataLoader(v_dataset, batch_size=cfg.hyperparameters.batch_size)
-    run_experiment(
-        cfg, train_data=train_dataloader, val_data=v_dataloader, classnames=["Frédéric Chopin", "Johann Sebastian Bach"]
-    )
+    dataset = BagOfPitches(split="validation")
+    # get composers to classify against each other
+    count = dataset.df.groupby(["composer"]).size()
+    composers_with_most_data = count[count.values > 5].index.tolist()
+
+    run_experiment(cfg, classnames=composers_with_most_data)
 
 
 def composer_comparison_main(cfg: DictConfig):
     """
-    Finds composers with at least 10 pieces in the database, then trains model for each pair by calling run_experiment
-    """
-    # loading data
-    dataset = BagOfPitches()
+    Finds composers with at least 5 pieces in the validation split,
+    then trains model for each pair by calling run_experiment
 
-    # get composers to classify against each other
-    count = dataset.df.groupby(["composer"]).size()
-    composers_with_most_data = count[count.values > 10]
-    composers_to_check = composers_with_most_data.index.tolist()
+    Args:
+        cfg (DictConfig): DictConfig passed from hydra.main function containing hyperparameters and model specification.
+    """
+
+    composers_to_check = find_composers_to_check()
     composers = [pair for pair in itertools.combinations(composers_to_check, r=2)]
     print(f"pairs to check: {len(composers)}")
 
@@ -52,14 +49,8 @@ def composer_comparison_main(cfg: DictConfig):
 
     # train model for each pair
     for pair in composers:
-        # loading data
-        dataset = BagOfPitches(selected_composers=pair)
-        v_dataset = BagOfPitches(split="validation", selected_composers=pair)
-        train_dataloader = DataLoader(dataset, batch_size=cfg.hyperparameters.batch_size, shuffle=True)
-        v_dataloader = DataLoader(v_dataset, batch_size=cfg.hyperparameters.batch_size)
-
         print(f"{pair[0]} vs {pair[1]}")
-        model = run_experiment(cfg=cfg, train_data=train_dataloader, val_data=v_dataloader, classnames=pair)
+        model = run_experiment(cfg=cfg, classnames=pair)
         models.append((model, pair))
         first_composer = pair[0].replace(" ", "_").lower()
         other_composer = pair[1].replace(" ", "_").lower()
@@ -68,45 +59,78 @@ def composer_comparison_main(cfg: DictConfig):
             torch.save(model.state_dict(), path)
 
 
-def run_experiment(cfg: DictConfig, train_data: DataLoader, val_data: DataLoader, classnames: list):
+def find_composers_to_check():
     """
-    Run an experiment using the provided configuration and data.
+    Finds well-represented composers in the dataset.
+
+    Returns:
+        list [str]: list of composers with at least 5 pieces in the validation split of the dataset.
+    """
+    # load data
+    dataset = BagOfPitches(split="validation")
+
+    # get composers with at least 5 pieces in the database
+    count = dataset.df.groupby(["composer"]).size()
+    composers_with_most_data = count[count.values > 5]
+    composers_to_check = composers_with_most_data.index.tolist()
+    return composers_to_check
+
+
+def initialize_wandb(cfg: DictConfig, project: str, classnames: list[str]):
+    # initialize experiment on WandB with unique run id
+    run_id = str(uuid.uuid1())[:8]
+    name = classnames[0].replace(" ", "_").lower()
+    for classname in classnames[1:]:
+        name += f"-{classname.replace(' ', '_').lower()}"
+    run = wandb.init(
+        project=project,
+        name=f"{name}-{run_id}",
+        config=OmegaConf.to_container(cfg, resolve=True),
+    )
+    return run
+
+
+def run_experiment(cfg: DictConfig, classnames: list[str]):
+    """
+    Run an experiment using the provided configuration and classnames from the dataset.
 
     Parameters:
         cfg (DictConfig): Configuration containing hyperparameters and model specifications.
-        train_data (DataLoader): DataLoader for the training dataset.
-        val_data (DataLoader): DataLoader for the validation dataset.
         classnames (list[str]): A list containing the class names corresponding to their indices.
 
     Returns:
         PitchSeqNN: The trained PitchSeqNN model.
 
-    This function initializes an experiment on WandB, initializes the model and optimizer, and performs
+    This function initializes an experiment on WandB, initializes the model, dataloaders and optimizer, and performs
     the training and validation loops. It logs the training and validation statistics to WandB.
     """
-    run_id = str(uuid.uuid1())[:8]
-    run = wandb.init(
-        project="MIDI-18-bag-of-pitches-composer-pairs",
-        name=f"{classnames[0].replace(' ', '_')}_vs_{classnames[1].replace(' ', '_')}-{run_id}",
-        config=OmegaConf.to_container(cfg, resolve=True),
-    )
-    print("\n" + str(cfg.model.layers))
+    # loading data
+    dataset = BagOfPitches(selected_composers=classnames)
+    v_dataset = BagOfPitches(split="validation", selected_composers=classnames)
+    train_dataloader = DataLoader(dataset, batch_size=cfg.hyperparameters.batch_size, shuffle=True)
+    v_dataloader = DataLoader(v_dataset, batch_size=cfg.hyperparameters.batch_size)
 
+    # initialize experiment on WandB with unique run id
+    run = initialize_wandb(cfg, classnames)
+
+    # initialize model, optimizer and loss criterion
     model = PitchSeqNN(cfg.model.layers)
     optimizer = torch.optim.Adam(model.parameters(), lr=cfg.hyperparameters.lr)
-
     criterion = nn.CrossEntropyLoss()
+
     pbar = tqdm(range(cfg.hyperparameters.num_epochs), desc="Training started!")
+
+    # training loop
     for epoch in pbar:
         train_stats = training_epoch(
-            train_dataloader=train_data,
+            train_dataloader=train_dataloader,
             optimizer=optimizer,
             model=model,
             criterion=criterion,
         )
 
         v_stats = validation_epoch(
-            loader=val_data,
+            loader=v_dataloader,
             model=model,
             criterion=criterion,
         )
@@ -172,7 +196,7 @@ def validation_epoch(
 
         v_loss += loss.item()
         correct += (pred.argmax(1) == labels).sum().item()
-    v_loss = v_loss / len(loader)
+
     accuracy = correct / len(loader.dataset)
     stats = {
         "val_loss": v_loss,

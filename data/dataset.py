@@ -121,7 +121,7 @@ class BagOfPitches(ComposerClassificationDataset):
     # Wolfgang Amadeus Mozart     34688
     #
     # pieces of composers:
-    # Alexander Scriabin          22 # val: None
+    # Alexander Scriabin          22 # val: ?
     # Claude Debussy              37
     # Domenico Scarlatti          18
     # Felix Mendelssohn           24 #test: 1 val: 3
