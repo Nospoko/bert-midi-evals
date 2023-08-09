@@ -53,7 +53,7 @@ def test_and_confusion_matrix_main(cfg: DictConfig, classnames: list[str]):
             torch.save(model.state_dict(), f"models/{path}.pth")
     else:
         model = PitchSeqNN(cfg.model.hidden_layers, 128, len(classnames))
-        model.load_state_dict(torch.load("models/scriabin-bach.pth"))
+        model.load_state_dict(torch.load(f"models/{path}.pth"))
 
     test_data = BagOfPitches(split="test", selected_composers=classnames)
     test_dataloader = DataLoader(test_data, batch_size=cfg.hyperparameters.batch_size, shuffle=True)
