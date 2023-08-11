@@ -167,7 +167,9 @@ def training_epoch(
 ):
     correct = 0
     running_loss = 0
-    f1 = 0
+    truths = torch.tensor([])
+    preds = torch.tensor([])
+
     for batch in train_dataloader:
         inputs = batch["data"]
         labels = batch["label"]
@@ -178,15 +180,17 @@ def training_epoch(
         loss = criterion(pred, labels)
         loss.backward()
 
+        preds = torch.concatenate((preds, pred.argmax(1)))
+        truths = torch.concatenate((truths, labels))
         optimizer.step()
 
         correct += (pred.argmax(1) == labels).sum().item()
+
         running_loss += loss.item()
-        f1 += f1_score(labels, pred.argmax(1), average="weighted")
 
     running_loss = running_loss / len(train_dataloader)
     accuracy = correct / len(train_dataloader.dataset)
-    f1 = f1 / len(train_dataloader)
+    f1 = f1_score(truths, preds, average="weighted")
     stats = {"loss": running_loss, "accuracy": accuracy, "f1_score": f1}
     return stats
 
@@ -198,7 +202,8 @@ def validation_epoch(
 ):
     v_loss = 0
     correct = 0
-    f1 = 0
+    truths = torch.tensor([])
+    preds = torch.tensor([])
     for batch in loader:
         inputs = batch["data"]
         labels = batch["label"]
@@ -206,13 +211,15 @@ def validation_epoch(
         pred = model(inputs)
         loss = criterion(pred, labels)
 
+        truths = torch.concatenate((truths, labels))
+        preds = torch.concatenate((preds, pred.argmax(1)))
+
         v_loss += loss.item()
         correct += (pred.argmax(1) == labels).sum().item()
-        f1 += f1_score(labels, pred.argmax(1), average="weighted")
 
     accuracy = correct / len(loader.dataset)
     v_loss = v_loss / len(loader.dataset)
-    f1 = f1 / len(loader.dataset)
+    f1 = f1_score(truths, preds, average="weighted")
     stats = {"val_loss": v_loss, "val_accuracy": accuracy, "val_f1_score": f1}
     return stats
 
