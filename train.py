@@ -1,31 +1,47 @@
 import uuid
-import os.path
 import itertools
 from typing import Callable
-from sklearn.metrics import f1_score
+
 import hydra
 import torch.optim
+import pandas as pd
 import torch.nn as nn
 from tqdm import tqdm
+from fortepyan import MidiPiece
+from sklearn.metrics import f1_score
 from torch.utils.data import DataLoader
 from omegaconf import OmegaConf, DictConfig
+
 import wandb
 from model import PitchSeqNN
+from utils import test_model
 from data.dataset import BagOfPitches
-from utils import test_model, make_confusion_matrix
 
 
 @hydra.main(version_base=None, config_path="conf", config_name="config")
-def main(cfg: DictConfig):  # base_acc
-    classnames = find_composers_to_check()
+def main(cfg: DictConfig):
+    classnames = ["Ludwig van Beethoven", "Franz Liszt"]
     model = run_experiment(cfg, classnames=classnames)
-
     test_data = BagOfPitches(split="test", selected_composers=classnames)
     test_dataloader = DataLoader(test_data, batch_size=cfg.hyperparameters.batch_size, shuffle=True)
 
-    true, pred = test_model(model, test_data=test_dataloader)
-    make_confusion_matrix(y_true=true, y_pred=pred, classes=classnames)
-    return validation_epoch(loader=test_dataloader, model=model, criterion=nn.CrossEntropyLoss())
+    # test model and get all wrongly predicted samples
+    wrongly_predicted = wrong_preds(model, test_dataloader)
+
+    # dataframe with notes
+    notes = wrongly_predicted["notes"][0]
+    piece = MidiPiece(pd.DataFrame(notes))
+    print(piece)
+
+
+def wrong_preds(model: nn.Module, test_data: DataLoader) -> dict:
+    # get data from testing
+    data = test_model(model, test_data=test_data)
+
+    # select samples with false predictions
+    filtered_indices = [index for index, value in enumerate(data["pred"]) if value != data["label"][index]]
+    wrongly_predicted = {key: [values[index] for index in filtered_indices] for key, values in data.items()}
+    return wrongly_predicted
 
 
 def pair_comparison_main(cfg: DictConfig):
@@ -103,7 +119,7 @@ def run_experiment(cfg: DictConfig, classnames: list[str]) -> nn.Module:
     dataset = BagOfPitches(selected_composers=classnames)
     v_dataset = BagOfPitches(split="validation", selected_composers=classnames)
     train_dataloader = DataLoader(dataset, batch_size=cfg.hyperparameters.batch_size, shuffle=True)
-    v_dataloader = DataLoader(v_dataset, batch_size=cfg.hyperparameters.batch_size)
+    v_dataloader = DataLoader(v_dataset, batch_size=cfg.hyperparameters.batch_size, shuffle=True)
 
     # initialize experiment on WandB with unique run id
     initialize_wandb(cfg, classnames)
@@ -132,14 +148,16 @@ def run_experiment(cfg: DictConfig, classnames: list[str]) -> nn.Module:
 
         wandb.log({**train_stats, **v_stats})
 
-        bar = ("loss={t_loss:.3f}, acc={t_acc:.2f}, f1_score={f1:.2f}, val_loss={v_loss:.3f}, val_acc={v_acc:.2f}, "
-               "val_f1_score={v_f1:.2f}").format(
+        bar = (
+            "loss={t_loss:.3f}, acc={t_acc:.2f}, f1_score={f1:.2f}, val_loss={v_loss:.3f}, val_acc={v_acc:.2f}, "
+            "val_f1_score={v_f1:.2f}"
+        ).format(
             t_loss=train_stats["loss"],
             t_acc=train_stats["accuracy"],
             f1=train_stats["f1_score"],
             v_loss=v_stats["val_loss"],
             v_acc=v_stats["val_accuracy"],
-            v_f1=v_stats["val_f1_score"]
+            v_f1=v_stats["val_f1_score"],
         )
         pbar.set_description(bar)
     wandb.finish()
@@ -174,11 +192,7 @@ def training_epoch(
     running_loss = running_loss / len(train_dataloader)
     accuracy = correct / len(train_dataloader.dataset)
     f1 = f1 / len(train_dataloader)
-    stats = {
-        "loss": running_loss,
-        "accuracy": accuracy,
-        "f1_score": f1
-    }
+    stats = {"loss": running_loss, "accuracy": accuracy, "f1_score": f1}
     return stats
 
 
@@ -204,11 +218,7 @@ def validation_epoch(
     accuracy = correct / len(loader.dataset)
     v_loss = v_loss / len(loader.dataset)
     f1 = f1 / len(loader.dataset)
-    stats = {
-        "val_loss": v_loss,
-        "val_accuracy": accuracy,
-        "val_f1_score": f1
-    }
+    stats = {"val_loss": v_loss, "val_accuracy": accuracy, "val_f1_score": f1}
     return stats
 
 
