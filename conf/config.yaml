@@ -1,8 +1,8 @@
 
 hyperparameters:
-  num_epochs: 500
+  num_epochs: 60
   batch_size: 16
-  lr: 1e-4
+  lr: 3e-5
 model:
   hidden_layers: [128, 64]
   save_model: n

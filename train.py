@@ -64,13 +64,8 @@ def pair_comparison_main(cfg: DictConfig):
         print(f"{pair[0]} vs {pair[1]}")
         model = run_experiment(cfg=cfg, classnames=pair)
         models.append((model, pair))
-        first_composer = pair[0].replace(" ", "_").lower()
-        other_composer = pair[1].replace(" ", "_").lower()
-        path = f"models/{first_composer}-{other_composer}.pth"
-        if cfg.model.save_model == "y":
-            torch.save(model.state_dict(), path)
-
-
+        
+        
 def find_composers_to_check() -> list[str]:
     """
     Finds well-represented composers in the dataset.
