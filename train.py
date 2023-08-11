@@ -2,14 +2,13 @@ import uuid
 import os.path
 import itertools
 from typing import Callable
-
+from sklearn.metrics import f1_score
 import hydra
 import torch.optim
 import torch.nn as nn
 from tqdm import tqdm
 from torch.utils.data import DataLoader
 from omegaconf import OmegaConf, DictConfig
-
 import wandb
 from model import PitchSeqNN
 from data.dataset import BagOfPitches
@@ -18,42 +17,8 @@ from utils import test_model, make_confusion_matrix
 
 @hydra.main(version_base=None, config_path="conf", config_name="config")
 def main(cfg: DictConfig):  # base_acc
-    composers = [
-        ["Alexander Scriabin", "Johann Sebastian Bach"],  # 0.58
-        ["Franz Liszt", "Johann Sebastian Bach"],  # 0.76
-        ["Alexander Scriabin", "Sergei Rachmaninoff"],  # 0.63
-        ["Robert Schumann", "Sergei Rachmaninoff"],  # 0.54
-        ["Robert Schumann", "Ludwig van Beethoven"],  # 0.59
-        ["Alexander Scriabin", "Johann Sebastian Bach", "Franz Liszt", "Ludwig van Beethoven"],
-    ]
-    for classnames in composers:
-        print(classnames)
-        print(test_and_confusion_matrix_main(cfg, classnames))
-
-
-def test_and_confusion_matrix_main(cfg: DictConfig, classnames: list[str]):
-    """
-    Evaluate a neural network model on test data, generate a confusion matrix,
-    and return the validation loss and accuracy.
-
-    Args:
-        cfg (DictConfig): Configuration settings for the experiment.
-        classnames (list[str]): List of class names or labels.
-
-    Returns:
-        Dict: Validation loss and accuracy achieved on the test data.
-    """
-    path = classnames[0].replace(" ", "_").lower()
-    for classname in classnames[1:]:
-        path += f"-{classname.replace(' ', '_').lower()}"
-    path += ".pth"
-    if not os.path.isfile(f"models/{path}"):
-        model = run_experiment(cfg, "MIDI-18-bag-of-pitches-pairs", classnames=classnames)
-        if cfg.model.save_model == "y":
-            torch.save(model.state_dict(), f"models/{path}.pth")
-    else:
-        model = PitchSeqNN(cfg.model.hidden_layers, 128, len(classnames))
-        model.load_state_dict(torch.load(f"models/{path}.pth"))
+    classnames = find_composers_to_check()
+    model = run_experiment(cfg, classnames=classnames)
 
     test_data = BagOfPitches(split="test", selected_composers=classnames)
     test_dataloader = DataLoader(test_data, batch_size=cfg.hyperparameters.batch_size, shuffle=True)
@@ -63,19 +28,7 @@ def test_and_confusion_matrix_main(cfg: DictConfig, classnames: list[str]):
     return validation_epoch(loader=test_dataloader, model=model, criterion=nn.CrossEntropyLoss())
 
 
-def one_run(cfg: DictConfig):
-    """
-    Function for testing
-    """
-    dataset = BagOfPitches(split="validation")
-    # get composers to classify against each other
-    count = dataset.df.groupby(["composer"]).size()
-    composers_with_most_data = count[count.values > 5].index.tolist()
-
-    run_experiment(cfg, classnames=composers_with_most_data)
-
-
-def composer_comparison_main(cfg: DictConfig):
+def pair_comparison_main(cfg: DictConfig):
     """
     Finds composers with at least 5 pieces in the validation split,
     then trains model for each pair by calling run_experiment
@@ -87,14 +40,13 @@ def composer_comparison_main(cfg: DictConfig):
     composers_to_check = find_composers_to_check()
     composers = [pair for pair in itertools.combinations(composers_to_check, r=2)]
     print(f"pairs to check: {len(composers)}")
-    project = "MIDI-18-bag-of-pitches-pairs"
     # container for trained models
     models = []
 
     # train model for each pair
     for pair in composers:
         print(f"{pair[0]} vs {pair[1]}")
-        model = run_experiment(cfg=cfg, project=project, classnames=pair)
+        model = run_experiment(cfg=cfg, classnames=pair)
         models.append((model, pair))
         first_composer = pair[0].replace(" ", "_").lower()
         other_composer = pair[1].replace(" ", "_").lower()
@@ -103,7 +55,7 @@ def composer_comparison_main(cfg: DictConfig):
             torch.save(model.state_dict(), path)
 
 
-def find_composers_to_check():
+def find_composers_to_check() -> list[str]:
     """
     Finds well-represented composers in the dataset.
 
@@ -120,23 +72,22 @@ def find_composers_to_check():
     return composers_to_check
 
 
-def initialize_wandb(cfg: DictConfig, project: str, classnames: list[str]):
+def initialize_wandb(cfg: DictConfig, classnames: list[str]):
     # initialize experiment on WandB with unique run id
     run_id = str(uuid.uuid1())[:8]
     name = classnames[0].replace(" ", "_").lower()
     for classname in classnames[1:]:
         name += f"-{classname.replace(' ', '_').lower()}"
-    run = wandb.init(
-        project=project,
+    wandb.init(
+        project=cfg.logger.project,
         name=f"{name}-{run_id}",
         config=OmegaConf.to_container(cfg, resolve=True),
     )
-    return run
 
 
-def run_experiment(cfg: DictConfig, project, classnames: list[str]):
+def run_experiment(cfg: DictConfig, classnames: list[str]) -> nn.Module:
     """
-    Run an experiment using the provided configuration and classnames from the dataset.
+    Run whole experiment using the provided configuration and classnames from the dataset.
 
     Parameters:
         cfg (DictConfig): Configuration containing hyperparameters and model specifications.
@@ -155,7 +106,7 @@ def run_experiment(cfg: DictConfig, project, classnames: list[str]):
     v_dataloader = DataLoader(v_dataset, batch_size=cfg.hyperparameters.batch_size)
 
     # initialize experiment on WandB with unique run id
-    run = initialize_wandb(cfg, project, classnames)
+    initialize_wandb(cfg, classnames)
 
     # initialize model, optimizer and loss criterion
     model = PitchSeqNN(cfg.model.hidden_layers, 128, len(classnames))
@@ -179,16 +130,19 @@ def run_experiment(cfg: DictConfig, project, classnames: list[str]):
             criterion=criterion,
         )
 
-        run.log({**train_stats, **v_stats})
+        wandb.log({**train_stats, **v_stats})
 
-        bar = "loss={t_loss:.3f}, acc={t_acc:.2f}, val_loss={v_loss:.3f}, val_acc={v_acc:.2f}".format(
+        bar = ("loss={t_loss:.3f}, acc={t_acc:.2f}, f1_score={f1:.2f}, val_loss={v_loss:.3f}, val_acc={v_acc:.2f}, "
+               "val_f1_score={v_f1:.2f}").format(
             t_loss=train_stats["loss"],
             t_acc=train_stats["accuracy"],
+            f1=train_stats["f1_score"],
             v_loss=v_stats["val_loss"],
             v_acc=v_stats["val_accuracy"],
+            v_f1=v_stats["val_f1_score"]
         )
         pbar.set_description(bar)
-    run.finish()
+    wandb.finish()
     return model
 
 
@@ -200,6 +154,7 @@ def training_epoch(
 ):
     correct = 0
     running_loss = 0
+    f1 = 0
     for batch in train_dataloader:
         inputs = batch["data"]
         labels = batch["label"]
@@ -214,12 +169,15 @@ def training_epoch(
 
         correct += (pred.argmax(1) == labels).sum().item()
         running_loss += loss.item()
+        f1 += f1_score(labels, pred.argmax(1), average="weighted")
 
     running_loss = running_loss / len(train_dataloader)
     accuracy = correct / len(train_dataloader.dataset)
+    f1 = f1 / len(train_dataloader)
     stats = {
         "loss": running_loss,
         "accuracy": accuracy,
+        "f1_score": f1
     }
     return stats
 
@@ -231,6 +189,7 @@ def validation_epoch(
 ):
     v_loss = 0
     correct = 0
+    f1 = 0
     for batch in loader:
         inputs = batch["data"]
         labels = batch["label"]
@@ -240,11 +199,15 @@ def validation_epoch(
 
         v_loss += loss.item()
         correct += (pred.argmax(1) == labels).sum().item()
+        f1 += f1_score(labels, pred.argmax(1), average="weighted")
 
     accuracy = correct / len(loader.dataset)
+    v_loss = v_loss / len(loader.dataset)
+    f1 = f1 / len(loader.dataset)
     stats = {
         "val_loss": v_loss,
         "val_accuracy": accuracy,
+        "val_f1_score": f1
     }
     return stats
 

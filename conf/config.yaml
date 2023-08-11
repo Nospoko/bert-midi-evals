@@ -1,3 +1,4 @@
+
 hyperparameters:
   num_epochs: 55
   batch_size: 32
@@ -7,3 +8,4 @@ model:
   save_model: n
 logger:
   run_name: "run-1"
+  project: "MIDI-18-bag-of-pitches"
