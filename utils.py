@@ -138,18 +138,17 @@ def test_model(model: nn.Module, test_data: DataLoader):
     true = torch.tensor([])
     data = {}
     with torch.no_grad():
-        for samples in test_data:
-            labels = samples["label"]
-            out = model(samples["data"])
+        for batch in test_data:
+            labels = batch["label"]
+            out = model(batch["data"])
             preds = out.argmax(1)
-            all_info = samples.copy()
+            all_info = batch.copy()
             # updating sample data with predictions
             all_info.update({"pred": preds})
 
             # reshaping notes so that there is one list of notes for each sample instead of batch
             notes = [
-                {key: [lst[i].item() for lst in lsts] for key, lsts in samples["notes"].items()}
-                for i in range(len(samples["data"]))
+                {key: [lst[i].item() for lst in lsts] for key, lsts in batch["notes"].items()} for i in range(len(batch["data"]))
             ]
             all_info["notes"] = notes
 

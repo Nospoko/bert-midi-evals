@@ -22,14 +22,15 @@ from data.dataset import BagOfPitches
 def main(cfg: DictConfig):
     classnames = ["Ludwig van Beethoven", "Franz Liszt"]
     model = run_experiment(cfg, classnames=classnames)
+
     test_data = BagOfPitches(split="test", selected_composers=classnames)
-    test_dataloader = DataLoader(test_data, batch_size=cfg.hyperparameters.batch_size, shuffle=True)
+    test_dataloader = DataLoader(test_data, batch_size=cfg.train.batch_size, shuffle=True)
 
     # test model and get all wrongly predicted samples
-    wrongly_predicted = wrong_preds(model, test_dataloader)
+    bad_preds = wrong_preds(model, test_dataloader)
 
     # dataframe with notes
-    notes = wrongly_predicted["notes"][0]
+    notes = bad_preds["notes"][0]
     piece = MidiPiece(pd.DataFrame(notes))
     print(piece)
 
@@ -64,8 +65,8 @@ def pair_comparison_main(cfg: DictConfig):
         print(f"{pair[0]} vs {pair[1]}")
         model = run_experiment(cfg=cfg, classnames=pair)
         models.append((model, pair))
-        
-        
+
+
 def find_composers_to_check() -> list[str]:
     """
     Finds well-represented composers in the dataset.
@@ -113,18 +114,18 @@ def run_experiment(cfg: DictConfig, classnames: list[str]) -> nn.Module:
     # loading data
     dataset = BagOfPitches(selected_composers=classnames)
     v_dataset = BagOfPitches(split="validation", selected_composers=classnames)
-    train_dataloader = DataLoader(dataset, batch_size=cfg.hyperparameters.batch_size, shuffle=True)
-    v_dataloader = DataLoader(v_dataset, batch_size=cfg.hyperparameters.batch_size, shuffle=True)
+    train_dataloader = DataLoader(dataset, batch_size=cfg.train.batch_size, shuffle=True)
+    v_dataloader = DataLoader(v_dataset, batch_size=cfg.train.batch_size, shuffle=True)
 
     # initialize experiment on WandB with unique run id
     initialize_wandb(cfg, classnames)
 
     # initialize model, optimizer and loss criterion
     model = PitchSeqNN(cfg.model.hidden_layers, 128, len(classnames))
-    optimizer = torch.optim.Adam(model.parameters(), lr=cfg.hyperparameters.lr)
+    optimizer = torch.optim.Adam(model.parameters(), lr=cfg.train.lr)
     criterion = nn.CrossEntropyLoss()
 
-    pbar = tqdm(range(cfg.hyperparameters.num_epochs), desc="Training started!")
+    pbar = tqdm(range(cfg.train.num_epochs), desc="Training started!")
 
     # training loop
     for epoch in pbar:
@@ -147,15 +148,30 @@ def run_experiment(cfg: DictConfig, classnames: list[str]) -> nn.Module:
             "loss={t_loss:.3f}, acc={t_acc:.2f}, f1_score={f1:.2f}, val_loss={v_loss:.3f}, val_acc={v_acc:.2f}, "
             "val_f1_score={v_f1:.2f}"
         ).format(
-            t_loss=train_stats["loss"],
-            t_acc=train_stats["accuracy"],
-            f1=train_stats["f1_score"],
-            v_loss=v_stats["val_loss"],
-            v_acc=v_stats["val_accuracy"],
-            v_f1=v_stats["val_f1_score"],
+            t_loss=train_stats["train/loss"],
+            t_acc=train_stats["train/accuracy"],
+            f1=train_stats["train/f1_score"],
+            v_loss=v_stats["test/loss"],
+            v_acc=v_stats["test/accuracy"],
+            v_f1=v_stats["test/f1_score"],
         )
         pbar.set_description(bar)
     wandb.finish()
+
+    path = f"models/{classnames[0].lower().replace(' ', '-')}"
+    for classname in classnames:
+        path += f"-{classname.lower().replace(' ', '-')}"
+    path += ".pt"
+
+    torch.save(
+        {
+            "epoch": cfg.train.num_epochs,
+            "model_state_dict": model.state_dict(),
+            "optimizer_state_dict": optimizer.state_dict(),
+            "loss": cfg.train.loss,
+        },
+        path,
+    )
     return model
 
 
@@ -191,7 +207,7 @@ def training_epoch(
     running_loss = running_loss / len(train_dataloader)
     accuracy = correct / len(train_dataloader.dataset)
     f1 = f1_score(truths, preds, average="weighted")
-    stats = {"loss": running_loss, "accuracy": accuracy, "f1_score": f1}
+    stats = {"train/loss": running_loss, "train/accuracy": accuracy, "train/f1_score": f1}
     return stats
 
 
@@ -220,7 +236,7 @@ def validation_epoch(
     accuracy = correct / len(loader.dataset)
     v_loss = v_loss / len(loader.dataset)
     f1 = f1_score(truths, preds, average="weighted")
-    stats = {"val_loss": v_loss, "val_accuracy": accuracy, "val_f1_score": f1}
+    stats = {"test/loss": v_loss, "test/accuracy": accuracy, "test/f1_score": f1}
     return stats
 
 
