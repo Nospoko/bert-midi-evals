@@ -1,11 +1,14 @@
 import uuid
+import os.path
 import itertools
 from typing import Callable
 
 import hydra
+import numpy as np
 import torch.optim
 import pandas as pd
 import torch.nn as nn
+import streamlit as st
 from tqdm import tqdm
 from fortepyan import MidiPiece
 from sklearn.metrics import f1_score
@@ -14,14 +17,20 @@ from omegaconf import OmegaConf, DictConfig
 
 import wandb
 from model import PitchSeqNN
-from utils import test_model
 from data.dataset import BagOfPitches
+from utils import test_model, piece_av_files
 
 
 @hydra.main(version_base=None, config_path="conf", config_name="config")
 def main(cfg: DictConfig):
     classnames = ["Ludwig van Beethoven", "Franz Liszt"]
-    model = run_experiment(cfg, classnames=classnames)
+    path = "models/ludwig-van-beethoven-franz-liszt.pt"
+    if os.path.isfile(path):
+        checkpoint = torch.load(path)
+        model = PitchSeqNN(cfg.model.hidden_layers, 128, 2)
+        model.load_state_dict(checkpoint["model_state_dict"])
+    else:
+        model = run_experiment(cfg, classnames=classnames)
 
     test_data = BagOfPitches(split="test", selected_composers=classnames)
     test_dataloader = DataLoader(test_data, batch_size=cfg.train.batch_size, shuffle=True)
@@ -29,10 +38,22 @@ def main(cfg: DictConfig):
     # test model and get all wrongly predicted samples
     bad_preds = wrong_preds(model, test_dataloader)
 
+    # choose random index to plot
+    index = np.random.randint(0, len(bad_preds) - 1)
     # dataframe with notes
-    notes = bad_preds["notes"][0]
+    notes = bad_preds["notes"][index]
+
+    # normalize notes to plot filled pianoroll
+    start_time = np.min(notes["start"])
+    notes["start"] -= start_time
+    notes["end"] -= start_time
+
     piece = MidiPiece(pd.DataFrame(notes))
-    print(piece)
+    piece.source["midi_filename"] = bad_preds["midi_filename"][index]
+    paths = piece_av_files(piece)
+    st.image(paths["pianoroll_path"])
+    st.audio(paths["mp3_path"])
+    st.table(piece.source)
 
 
 def wrong_preds(model: nn.Module, test_data: DataLoader) -> dict:
@@ -159,7 +180,7 @@ def run_experiment(cfg: DictConfig, classnames: list[str]) -> nn.Module:
     wandb.finish()
 
     path = f"models/{classnames[0].lower().replace(' ', '-')}"
-    for classname in classnames:
+    for classname in classnames[1:]:
         path += f"-{classname.lower().replace(' ', '-')}"
     path += ".pt"
 
@@ -168,7 +189,7 @@ def run_experiment(cfg: DictConfig, classnames: list[str]) -> nn.Module:
             "epoch": cfg.train.num_epochs,
             "model_state_dict": model.state_dict(),
             "optimizer_state_dict": optimizer.state_dict(),
-            "loss": cfg.train.loss,
+            "lr": cfg.train.lr,
         },
         path,
     )

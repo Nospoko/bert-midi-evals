@@ -125,7 +125,7 @@ def make_confusion_matrix(y_true, y_pred, classes: Optional[list[str]] = None, f
 
 def test_model(model: nn.Module, test_data: DataLoader):
     """
-    Test the performance of the trained ComposerClassifier model with the provided test data loader.
+    Creates a shuffled copy of the input dataset in as a dict, with additional 'pred' column for model predictions.
 
     Args:
         model (PitchSeqNN): The trained ComposerClassifier model to be evaluated.

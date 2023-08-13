@@ -66,9 +66,19 @@ class BagOfPitches(ComposerClassificationDataset):
         composer = self.samples[idx]["composer"]
         notes = self.samples[idx]["notes"]
         label = self.selected_composers.index(composer)
-
+        start = np.min(self.samples[idx]["notes"]["start"])
+        finish = np.max(self.samples[idx]["notes"]["end"])
         # pass all the info on sample
-        sample = {"data": data, "label": label, "composer": composer, "title": title, "midi_filename": filename, "notes": notes}
+        sample = {
+            "data": data,
+            "label": label,
+            "composer": composer,
+            "title": title,
+            "midi_filename": filename,
+            "notes": notes,
+            "start_time": start,
+            "finish": finish,
+        }
 
         return sample
 
