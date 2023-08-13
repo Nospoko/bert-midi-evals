@@ -37,23 +37,32 @@ def main(cfg: DictConfig):
 
     # test model and get all wrongly predicted samples
     bad_preds = wrong_preds(model, test_dataloader)
-
+    cols = st.columns(2)
+    n_samples = 20
+    it = 0
     # choose random index to plot
-    index = np.random.randint(0, len(bad_preds) - 1)
-    # dataframe with notes
-    notes = bad_preds["notes"][index]
+    indexes = np.random.randint(0, len(bad_preds) - 1, size=n_samples)
+    for index in indexes:
+        # choose column
+        col = it % 2
+        it += 1
+        # dataframe with notes
+        notes = bad_preds["notes"][index]
 
-    # normalize notes to plot filled pianoroll
-    start_time = np.min(notes["start"])
-    notes["start"] -= start_time
-    notes["end"] -= start_time
+        # normalize notes to plot filled pianoroll
+        start_time = np.min(notes["start"])
+        notes["start"] -= start_time
+        notes["end"] -= start_time
 
-    piece = MidiPiece(pd.DataFrame(notes))
-    piece.source["midi_filename"] = bad_preds["midi_filename"][index]
-    paths = piece_av_files(piece)
-    st.image(paths["pianoroll_path"])
-    st.audio(paths["mp3_path"])
-    st.table(piece.source)
+        piece = MidiPiece(pd.DataFrame(notes))
+        piece.source["midi_filename"] = bad_preds["midi_filename"][index]
+        piece.source["composer"] = bad_preds["composer"][index]
+        piece.source["title"] = bad_preds["title"][index]
+        paths = piece_av_files(piece)
+        with cols[col]:
+            st.image(paths["pianoroll_path"])
+            st.audio(paths["mp3_path"])
+            st.table(piece.source)
 
 
 def wrong_preds(model: nn.Module, test_data: DataLoader) -> dict:
