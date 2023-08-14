@@ -3,8 +3,8 @@ train:
   batch_size: 16
   lr: 3e-5
 model:
+  composers: ["Ludwig van Beethoven", "Franz Liszt"]
   hidden_layers: [128, 64]
-  save_model: n
 logger:
   run_name: "run-1"
   project: "MIDI-18-bag-of-pitches"

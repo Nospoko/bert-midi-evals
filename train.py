@@ -23,46 +23,8 @@ from utils import test_model, piece_av_files
 
 @hydra.main(version_base=None, config_path="conf", config_name="config")
 def main(cfg: DictConfig):
-    classnames = ["Ludwig van Beethoven", "Franz Liszt"]
-    path = "models/ludwig-van-beethoven-franz-liszt.pt"
-    if os.path.isfile(path):
-        checkpoint = torch.load(path)
-        model = PitchSeqNN(cfg.model.hidden_layers, 128, 2)
-        model.load_state_dict(checkpoint["model_state_dict"])
-    else:
-        model = run_experiment(cfg, classnames=classnames)
-
-    test_data = BagOfPitches(split="test", selected_composers=classnames)
-    test_dataloader = DataLoader(test_data, batch_size=cfg.train.batch_size, shuffle=True)
-
-    # test model and get all wrongly predicted samples
-    bad_preds = wrong_preds(model, test_dataloader)
-    cols = st.columns(2)
-    n_samples = 20
-    it = 0
-    # choose random index to plot
-    indexes = np.random.randint(0, len(bad_preds) - 1, size=n_samples)
-    for index in indexes:
-        # choose column
-        col = it % 2
-        it += 1
-        # dataframe with notes
-        notes = bad_preds["notes"][index]
-
-        # normalize notes to plot filled pianoroll
-        start_time = np.min(notes["start"])
-        notes["start"] -= start_time
-        notes["end"] -= start_time
-
-        piece = MidiPiece(pd.DataFrame(notes))
-        piece.source["midi_filename"] = bad_preds["midi_filename"][index]
-        piece.source["composer"] = bad_preds["composer"][index]
-        piece.source["title"] = bad_preds["title"][index]
-        paths = piece_av_files(piece)
-        with cols[col]:
-            st.image(paths["pianoroll_path"])
-            st.audio(paths["mp3_path"])
-            st.table(piece.source)
+    model, run_id = run_experiment(cfg, classnames=cfg.model.composers)
+    print(run_id)
 
 
 def wrong_preds(model: nn.Module, test_data: DataLoader) -> dict:
@@ -71,8 +33,8 @@ def wrong_preds(model: nn.Module, test_data: DataLoader) -> dict:
 
     # select samples with false predictions
     filtered_indices = [index for index, value in enumerate(data["pred"]) if value != data["label"][index]]
-    wrongly_predicted = {key: [values[index] for index in filtered_indices] for key, values in data.items()}
-    return wrongly_predicted
+    wrong_predictions = {key: [values[index] for index in filtered_indices] for key, values in data.items()}
+    return wrong_predictions
 
 
 def pair_comparison_main(cfg: DictConfig):
@@ -125,6 +87,7 @@ def initialize_wandb(cfg: DictConfig, classnames: list[str]):
         name=f"{name}-{run_id}",
         config=OmegaConf.to_container(cfg, resolve=True),
     )
+    return run_id
 
 
 def run_experiment(cfg: DictConfig, classnames: list[str]) -> nn.Module:
@@ -137,6 +100,7 @@ def run_experiment(cfg: DictConfig, classnames: list[str]) -> nn.Module:
 
     Returns:
         PitchSeqNN: The trained PitchSeqNN model.
+        int: Run id.
 
     This function initializes an experiment on WandB, initializes the model, dataloaders and optimizer, and performs
     the training and validation loops. It logs the training and validation statistics to WandB.
@@ -148,7 +112,7 @@ def run_experiment(cfg: DictConfig, classnames: list[str]) -> nn.Module:
     v_dataloader = DataLoader(v_dataset, batch_size=cfg.train.batch_size, shuffle=True)
 
     # initialize experiment on WandB with unique run id
-    initialize_wandb(cfg, classnames)
+    run_id = initialize_wandb(cfg, classnames)
 
     # initialize model, optimizer and loss criterion
     model = PitchSeqNN(cfg.model.hidden_layers, 128, len(classnames))
@@ -187,11 +151,10 @@ def run_experiment(cfg: DictConfig, classnames: list[str]) -> nn.Module:
         )
         pbar.set_description(bar)
     wandb.finish()
-
-    path = f"models/{classnames[0].lower().replace(' ', '-')}"
-    for classname in classnames[1:]:
-        path += f"-{classname.lower().replace(' ', '-')}"
-    path += ".pt"
+    path = "models/"
+    for classname in classnames:
+        path += f"{classname.lower().replace(' ', '_')}-"
+    path += f"{run_id}.pt"
 
     torch.save(
         {
@@ -202,7 +165,7 @@ def run_experiment(cfg: DictConfig, classnames: list[str]) -> nn.Module:
         },
         path,
     )
-    return model
+    return model, run_id
 
 
 def training_epoch(
