@@ -15,12 +15,14 @@ To evaluate the model, run:
 ```shell
 python eval.py run_id="run_id"
 ```
+The program will print loss, accuracy and f1 score, that the model reached on test dataset.
 
 ## Dashboard
 You can look through samples on which model performs good/bad. To start, run:
 ```shell
 streamlit run --server.port 4466 dashboard.py
 ```
+
 ### Code Style
 
 This repository uses pre-commit hooks with forced python formatting ([black](https://github.com/psf/black),

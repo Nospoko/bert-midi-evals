@@ -1,17 +1,16 @@
 import os
+
 import torch
-import hydra
-from eval import load_checkpoint
-import streamlit as st
+import numpy as np
+import pandas as pd
 import torch.nn as nn
-from omegaconf import DictConfig
+import streamlit as st
+from fortepyan import MidiPiece
 from torch.utils.data import DataLoader
+
 from model import PitchSeqNN
 from data.dataset import BagOfPitches
 from utils import test_model, piece_av_files
-import numpy as np
-import pandas as pd
-from fortepyan import MidiPiece
 
 
 def main():
@@ -32,10 +31,10 @@ def main():
     # test model and get predicted samples
     if option == "wrong":
         bad_preds = wrong_predictions(model, test_dataloader)
-        create_dashboard(bad_preds)
+        create_dashboard(bad_preds, classnames)
     else:
         good_preds = right_predictions(model, test_dataloader)
-        create_dashboard(good_preds)
+        create_dashboard(good_preds, classnames)
 
 
 def wrong_predictions(model: nn.Module, test_data: DataLoader) -> dict:
@@ -57,9 +56,9 @@ def right_predictions(model: nn.Module, test_data: DataLoader) -> dict:
     return good_predictions
 
 
-def create_dashboard(preds):
+def create_dashboard(preds, classnames):
     cols = st.columns(2)
-    n_samples = 20
+    n_samples = 60
     it = 0
     # choose random index to plot
     indexes = np.random.randint(low=0, high=len(preds["label"]) - 1, size=n_samples)
@@ -80,6 +79,7 @@ def create_dashboard(preds):
         piece.source["midi_filename"] = preds["midi_filename"][index]
         piece.source["composer"] = preds["composer"][index]
         piece.source["title"] = preds["title"][index]
+        piece.source["predicted"] = classnames[preds["pred"][index]]
         paths = piece_av_files(piece)
         with cols[col]:
             st.image(paths["pianoroll_path"])
