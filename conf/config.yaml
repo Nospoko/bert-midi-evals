@@ -6,5 +6,4 @@ model:
   composers: ["Ludwig van Beethoven", "Franz Liszt"]
   hidden_layers: [128, 64]
 logger:
-  run_name: "run-1"
   project: "MIDI-18-bag-of-pitches"
