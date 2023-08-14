@@ -1,24 +1,19 @@
 import uuid
-import os.path
 import itertools
 from typing import Callable
 
 import hydra
-import numpy as np
 import torch.optim
-import pandas as pd
 import torch.nn as nn
-import streamlit as st
 from tqdm import tqdm
-from fortepyan import MidiPiece
 from sklearn.metrics import f1_score
 from torch.utils.data import DataLoader
 from omegaconf import OmegaConf, DictConfig
 
 import wandb
 from model import PitchSeqNN
+from utils import test_model
 from data.dataset import BagOfPitches
-from utils import test_model, piece_av_files
 
 
 @hydra.main(version_base=None, config_path="conf", config_name="config")

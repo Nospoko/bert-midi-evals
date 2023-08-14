@@ -1,17 +1,14 @@
 import os.path
 
-import torch
 import hydra
-from torch.utils.data import DataLoader
-from omegaconf import OmegaConf, DictConfig
-import numpy as np
-import torch.optim
-import pandas as pd
+import torch
 import torch.nn as nn
+from omegaconf import DictConfig
+from torch.utils.data import DataLoader
+
 from model import PitchSeqNN
-from data.dataset import BagOfPitches
-import utils as U
 from train import validation_epoch
+from data.dataset import BagOfPitches
 
 
 @hydra.main(version_base=None, config_path="conf", config_name="eval_config")
@@ -36,7 +33,7 @@ def load_checkpoint(run_id):
     # find path with desired run_id
     path = None
     for file in os.listdir("models"):
-        for word in file.split('-'):
+        for word in file.split("-"):
             if word == f"{run_id}.pt":
                 path = file
                 break
