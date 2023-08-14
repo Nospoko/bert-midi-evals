@@ -198,7 +198,7 @@ def run_experiment(cfg: DictConfig, classnames: list[str]) -> nn.Module:
             "epoch": cfg.train.num_epochs,
             "model_state_dict": model.state_dict(),
             "optimizer_state_dict": optimizer.state_dict(),
-            "lr": cfg.train.lr,
+            "config": OmegaConf.to_container(cfg, resolve=True),
         },
         path,
     )
