@@ -12,7 +12,6 @@ from omegaconf import OmegaConf, DictConfig
 
 import wandb
 from model import PitchSeqNN
-from utils import test_model
 from data.dataset import BagOfPitches
 
 
@@ -20,16 +19,6 @@ from data.dataset import BagOfPitches
 def main(cfg: DictConfig):
     model, run_id = run_experiment(cfg, classnames=cfg.model.composers)
     print(run_id)
-
-
-def wrong_preds(model: nn.Module, test_data: DataLoader) -> dict:
-    # get data from testing
-    data = test_model(model, test_data=test_data)
-
-    # select samples with false predictions
-    filtered_indices = [index for index, value in enumerate(data["pred"]) if value != data["label"][index]]
-    wrong_predictions = {key: [values[index] for index in filtered_indices] for key, values in data.items()}
-    return wrong_predictions
 
 
 def pair_comparison_main(cfg: DictConfig):

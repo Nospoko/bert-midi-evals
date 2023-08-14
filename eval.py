@@ -41,7 +41,7 @@ def load_checkpoint(run_id):
         print("no run with this id found")
         return None
     path = "models/" + path
-    print(path)
+
     # load checkpoint from path
     checkpoint = torch.load(path)
     return checkpoint
