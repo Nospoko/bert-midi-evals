@@ -27,7 +27,7 @@ def main():
     classnames = model_config["model"]["composers"]
 
     test_data = BagOfPitches(split="test", selected_composers=classnames)
-    # I use unshuffled data so I can plot each sample individually (indexes are unambiguous)
+    # I use unshuffled data, so I can plot each sample individually (indexes are unambiguous)
     test_dataloader = DataLoader(test_data, batch_size=model_config["train"]["batch_size"], shuffle=False)
     # get predictions for each sample
     pieces_data = samples_with_pred(model, test_dataloader)
@@ -114,6 +114,8 @@ def create_samples_dashboard(preds, classnames):
         notes["end"] -= start_time
 
         piece = MidiPiece(pd.DataFrame(notes))
+        
+        # use index as identifier for each sample
         name = preds["midi_filename"][index].split("/")[0] + "/" + str(index)
         piece.source["midi_filename"] = name + os.path.basename(preds["midi_filename"][index])
         piece.source["title"] = preds["title"][index]
