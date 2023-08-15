@@ -29,7 +29,7 @@ def main(cfg: DictConfig):
     print(validation_epoch(model=model, loader=test_dataloader, criterion=criterion))
 
 
-def load_checkpoint(run_id):
+def load_checkpoint(run_id: str):
     # find path with desired run_id
     path = None
     for file in os.listdir("models"):

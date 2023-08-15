@@ -123,9 +123,9 @@ def make_confusion_matrix(y_true, y_pred, classes: Optional[list[str]] = None, f
     # plt.savefig(f"plots/{path}")
 
 
-def test_model(model: nn.Module, test_data: DataLoader):
+def samples_with_pred(model: nn.Module, test_data: DataLoader):
     """
-    Creates a shuffled copy of the input dataset in as a dict, with additional 'pred' column for model predictions.
+    Creates a copy of the input dataset passed by a dataloader as a dict, with additional 'pred' column for model predictions.
 
     Args:
         model (PitchSeqNN): The trained ComposerClassifier model to be evaluated.
