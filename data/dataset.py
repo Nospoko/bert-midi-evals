@@ -1,3 +1,4 @@
+import torch
 import numpy as np
 import pandas as pd
 from datasets import load_dataset
@@ -9,7 +10,7 @@ class ComposerClassificationDataset:
         split: str = "train",
         sequence_length: int = 64,
         # chose these composers due to the similar total number of notes in maestro dataset
-        selected_composers: list[str] = ["Frédéric Chopin", "Ludwig van Beethoven"],
+        selected_composers: list[str] = ["Frédéric Chopin", "Johann Sebastian Bach"],
     ):
         self.sequence_length = sequence_length
         self.selected_composers = selected_composers
@@ -51,3 +52,32 @@ class ComposerClassificationDataset:
 
     def __getitem__(self, idx: int):
         return self.samples[idx]
+
+
+class BagOfPitches(ComposerClassificationDataset):
+    def __getitem__(self, idx: int):
+        pitch = self.samples[idx]["notes"]["pitch"]
+        histogram = [pitch.count(it) for it in range(128)]
+
+        # For seq len 64, 44 is the maximum count of a note in the train split, wtf
+        data = torch.tensor(histogram).float() / 64  # found out there is a sample with 64 same notes :O
+        title = self.samples[idx]["title"]
+        filename = self.samples[idx]["midi_filename"]
+        composer = self.samples[idx]["composer"]
+        notes = self.samples[idx]["notes"]
+        label = self.selected_composers.index(composer)
+        start = np.min(self.samples[idx]["notes"]["start"])
+        finish = np.max(self.samples[idx]["notes"]["end"])
+        # pass all the info on sample
+        sample = {
+            "data": data,
+            "label": label,
+            "composer": composer,
+            "title": title,
+            "midi_filename": filename,
+            "notes": notes,
+            "start_time": start,
+            "finish": finish,
+        }
+
+        return sample

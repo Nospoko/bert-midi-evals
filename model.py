@@ -7,17 +7,17 @@ class PitchSeqNN(nn.Module):
     A sequential neural network model for processing pitch data.
 
     Parameters:
-        layers (list): A list specifying the number of neurons in each layer of the neural network.
-                       The first element should represent the input size, the last element represents
-                       the output size, and the intermediate elements represent the hidden layer sizes.
+        hidden_layers (list): A list specifying the number of neurons in each hidden layer of the neural network.
+        input_size (int): The input size.
+        num_classes (int): The output size.
     """
 
-    def __init__(self, layers: list):
+    def __init__(self, hidden_layers: list, input_size: int, num_classes: int):
         super(PitchSeqNN, self).__init__()
-
-        self.input_layer = nn.Linear(layers[0], layers[1])
-        self.layers = nn.ModuleList([nn.Linear(layers[i], layers[i + 1]) for i in range(1, len(layers) - 2)])
-        self.output_layer = nn.Linear(layers[-2], layers[-1])
+        self.input_layer = nn.Linear(input_size, hidden_layers[0])
+        list_of_layers = [nn.Linear(hidden_layers[i], hidden_layers[i + 1]) for i in range(0, len(hidden_layers) - 1)]
+        self.layers = nn.ModuleList(list_of_layers)
+        self.output_layer = nn.Linear(hidden_layers[-1], num_classes)
 
     def forward(self, x):
         x = F.relu(self.input_layer(x))
